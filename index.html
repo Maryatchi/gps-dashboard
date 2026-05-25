@@ -1236,8 +1236,8 @@ function renderKPIs() {
   document.getElementById('k-total').textContent=t;
   document.getElementById('k-oficina').textContent=d.filter(v=>v.obs==='Oficina').length;
   document.getElementById('k-sinistro').textContent=d.filter(v=>v.obs==='Sinistro').length;
-  document.getElementById('k-install').textContent=d.filter(v=>v.msgGPS==='Instalar GPS').length;
-  document.getElementById('k-rgps').textContent=d.filter(v=>v.msgGPS==='REVER GPS').length;
+  document.getElementById('k-install').textContent=d.filter(v=>v.msgGPS==='Instalar GPS'&&!['Oficina','Sinistro'].includes(v.obs)).length;
+  document.getElementById('k-rgps').textContent=d.filter(v=>v.msgGPS==='REVER GPS'&&!['Oficina','Sinistro'].includes(v.obs)).length;
   document.getElementById('k-porta').textContent=d.filter(v=>v.msgPorta==='REVER S.Porta').length;
   document.getElementById('k-temp').textContent=d.filter(v=>v.msgTemp==='REVER Temperaturas').length;
   const gok=d.filter(v=>v.gpsOK).length;
@@ -1261,8 +1261,8 @@ function renderSysBars() {
 function renderFleetActions() {
   const d=getFilt();
   const items=[
-    {col:'#ef4444',title:'Instalar GPS',sub:'Sem unidade instalada',count:d.filter(v=>v.msgGPS==='Instalar GPS').length,cls:'c-red',filter:'instalar'},
-    {col:'#ef4444',title:'REVER GPS',sub:'GPS não comunica',count:d.filter(v=>v.msgGPS==='REVER GPS').length,cls:'c-red',filter:'rever_gps'},
+    {col:'#ef4444',title:'Instalar GPS',sub:'Sem unidade instalada',count:d.filter(v=>v.msgGPS==='Instalar GPS'&&!['Oficina','Sinistro'].includes(v.obs)).length,cls:'c-red',filter:'instalar'},
+    {col:'#ef4444',title:'REVER GPS',sub:'GPS não comunica',count:d.filter(v=>v.msgGPS==='REVER GPS'&&!['Oficina','Sinistro'].includes(v.obs)).length,cls:'c-red',filter:'rever_gps'},
     {col:'#f59e0b',title:'REVER Porta',sub:'Sensor de porta',count:d.filter(v=>v.msgPorta==='REVER S.Porta').length,cls:'c-amber',filter:'porta'},
     {col:'#f59e0b',title:'REVER Temperatura',sub:'Sensor de temperatura',count:d.filter(v=>v.msgTemp==='REVER Temperaturas').length,cls:'c-amber',filter:'temp'},
     {col:'#f59e0b',title:'REVER Bateria',sub:'Tensão baixa',count:d.filter(v=>v.msgVolt==='REVER Bateria').length,cls:'c-amber',filter:'bateria'},
@@ -1349,12 +1349,13 @@ function renderVehicles() {
     return regMatch(v)&&(tFilt==='all'||v.transp===tFilt);
   });
   const f=currentVFilt;
-  if(f==='todos_gps') idx=idx.filter(i=>!!getEff(ALL_VEHICLES[i],i).msgGPS);
-  else if(f==='instalar') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgGPS==='Instalar GPS');
-  else if(f==='rever_gps') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgGPS==='REVER GPS');
-  else if(f==='porta') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgPorta==='REVER S.Porta');
-  else if(f==='temp') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgTemp==='REVER Temperaturas');
-  else if(f==='bateria') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgVolt==='REVER Bateria');
+  const noOficina = i => !['Oficina','Sinistro'].includes(getEff(ALL_VEHICLES[i],i).obs);
+  if(f==='todos_gps') idx=idx.filter(i=>!!getEff(ALL_VEHICLES[i],i).msgGPS&&noOficina(i));
+  else if(f==='instalar') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgGPS==='Instalar GPS'&&noOficina(i));
+  else if(f==='rever_gps') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgGPS==='REVER GPS'&&noOficina(i));
+  else if(f==='porta') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgPorta==='REVER S.Porta'&&noOficina(i));
+  else if(f==='temp') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgTemp==='REVER Temperaturas'&&noOficina(i));
+  else if(f==='bateria') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgVolt==='REVER Bateria'&&noOficina(i));
   else if(f==='oficina') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).obs==='Oficina');
   else if(f==='sinistro') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).obs==='Sinistro');
   else if(f==='removida') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).obs==='Removida');
@@ -1609,7 +1610,7 @@ function exportExcel() {
   const wb=XLSX.utils.book_new();
   const resumo=[['FLEET DASHBOARD — RELATÓRIO SEMANAL'],[`${meta.week} · ${meta.date} · ${rLabel}`],[''],
     ['RESUMO'],['Total',d.length],['Oficina',d.filter(v=>v.obs==='Oficina').length],['Sinistro',d.filter(v=>v.obs==='Sinistro').length],
-    ['Instalar GPS',d.filter(v=>v.msgGPS==='Instalar GPS').length],['REVER GPS',d.filter(v=>v.msgGPS==='REVER GPS').length],
+    ['Instalar GPS',d.filter(v=>v.msgGPS==='Instalar GPS'&&!['Oficina','Sinistro'].includes(v.obs)).length],['REVER GPS',d.filter(v=>v.msgGPS==='REVER GPS'&&!['Oficina','Sinistro'].includes(v.obs)).length],
     ['REVER Porta',d.filter(v=>v.msgPorta==='REVER S.Porta').length],['REVER Temp',d.filter(v=>v.msgTemp==='REVER Temperaturas').length],
     ['REVER Bateria',d.filter(v=>v.msgVolt==='REVER Bateria').length],[''],
     ['SISTEMAS','%','OK','Total'],
@@ -2233,12 +2234,13 @@ function exportListaFiltrada() {
     const v=getEff(ALL_VEHICLES[i],i);
     return regMatch(v)&&!['Removida','Oficina','Sinistro'].includes(v.obs)&&(tFilt==='all'||v.transp===tFilt);
   });
-  if(f==='todos_gps') idx=idx.filter(i=>!!getEff(ALL_VEHICLES[i],i).msgGPS);
-  else if(f==='instalar') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgGPS==='Instalar GPS');
-  else if(f==='rever_gps') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgGPS==='REVER GPS');
-  else if(f==='porta') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgPorta==='REVER S.Porta');
-  else if(f==='temp') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgTemp==='REVER Temperaturas');
-  else if(f==='bateria') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgVolt==='REVER Bateria');
+  const noOficina = i => !['Oficina','Sinistro'].includes(getEff(ALL_VEHICLES[i],i).obs);
+  if(f==='todos_gps') idx=idx.filter(i=>!!getEff(ALL_VEHICLES[i],i).msgGPS&&noOficina(i));
+  else if(f==='instalar') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgGPS==='Instalar GPS'&&noOficina(i));
+  else if(f==='rever_gps') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgGPS==='REVER GPS'&&noOficina(i));
+  else if(f==='porta') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgPorta==='REVER S.Porta'&&noOficina(i));
+  else if(f==='temp') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgTemp==='REVER Temperaturas'&&noOficina(i));
+  else if(f==='bateria') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgVolt==='REVER Bateria'&&noOficina(i));
   else if(f==='oficina') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).obs==='Oficina');
   else if(f==='sinistro') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).obs==='Sinistro');
   else if(f==='removida') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).obs==='Removida');
