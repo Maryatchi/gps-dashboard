@@ -2231,7 +2231,7 @@ function exportListaFiltrada() {
 
   let idx=ALL_VEHICLES.map((_,i)=>i).filter(i=>{
     const v=getEff(ALL_VEHICLES[i],i);
-    return regMatch(v)&&v.obs!=='Removida'&&(tFilt==='all'||v.transp===tFilt);
+    return regMatch(v)&&!['Removida','Oficina','Sinistro'].includes(v.obs)&&(tFilt==='all'||v.transp===tFilt);
   });
   if(f==='todos_gps') idx=idx.filter(i=>!!getEff(ALL_VEHICLES[i],i).msgGPS);
   else if(f==='instalar') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgGPS==='Instalar GPS');
