@@ -296,6 +296,22 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <input type="file" id="fi-rem" accept=".xlsx,.xls,.csv" style="display:none" onchange="loadRemover(this.files[0])">
     </div>
 
+
+    <!-- PORTAS DIGITAIS -->
+    <div class="load-card optional" id="lc-porta">
+      <div class="lc-tag tag-opt">Opcional</div>
+      <div class="lc-header">
+        <div class="lc-icon" style="background:rgba(20,184,166,.15)">🚪</div>
+        <div><div class="lc-title">Portas Digitais · Geotab</div><div class="lc-sub">Exporta como Excel no Geotab → carrega aqui</div></div>
+      </div>
+      <div class="dz" id="dz-porta" onclick="document.getElementById('fi-porta').click()">
+        <div class="dz-icon">📂</div>
+        <div>Digital_Ports_Report.xlsx</div>
+        <div class="dz-name" id="dz-porta-name"></div>
+      </div>
+      <input type="file" id="fi-porta" accept=".xlsx,.xls,.csv" style="display:none" onchange="loadPortas(this.files[0])">
+    </div>
+
     <!-- NOTAS / TRABALHOS -->
     <div class="load-card optional" id="lc6">
       <div class="lc-tag tag-opt">Opcional</div>
@@ -314,8 +330,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 
   <div class="load-footer">
     <span class="load-hint">Podes carregar só o Base JSON e adicionar os restantes depois na dashboard</span>
-    <div style="display:flex;gap:8px;align-items:center">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
       <button class="btn-resume" id="btn-resume" onclick="resumeSession()">↩ Retomar sessão anterior</button>
+      <button id="btn-start-pos" style="display:none;background:var(--teal-dim);color:#5eead4;border:1px solid rgba(20,184,166,.35);border-radius:var(--r);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;padding:10px 18px;cursor:pointer" onclick="startFromPos()">📍 Supabase + Posições</button>
       <button class="btn-start" id="btn-start" onclick="startDashboard()">Abrir Dashboard →</button>
     </div>
   </div>
@@ -837,7 +854,130 @@ function resumeSession() {
   edits = ls(K_EDITS) || {};
   meta  = ls(K_META)  || meta;
   if (!ALL_VEHICLES.length) { alert('Sessão inválida.'); return; }
+  applyPosData();
   openDashboard();
+}
+
+// ── PORTAS DIGITAIS (Geotab XLS export) ──────────────────────────────────────
+let portaData = new Set(); // norm(mat) das viaturas com porta OK
+
+function loadPortas(file) {
+  if (!file) return;
+  setLoaderErr('');
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type:'array', cellDates:true });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json(ws, { header:1, defval:null });
+
+      portaData = new Set();
+
+      // Estratégia 1: procurar padrão "Matricula:XXXX" em qualquer célula
+      const plateRe = /[Mm]atricula[:\s]+([A-Z0-9\-]+)/;
+      for (const row of raw) {
+        for (const cell of (row||[])) {
+          const s = String(cell||'');
+          const m = s.match(plateRe);
+          if (m) portaData.add(norm(m[1]));
+        }
+      }
+
+      // Estratégia 2: se não encontrou pelo padrão, tentar coluna de matrícula
+      if (!portaData.size) {
+        let hdrRow = -1, matCol = -1;
+        for (let i = 0; i < Math.min(raw.length, 10); i++) {
+          const joined = (raw[i]||[]).map(v=>String(v||'')).join('|');
+          if (/matr[íi]cula|license.*plate|plate/i.test(joined)) { hdrRow = i; break; }
+        }
+        if (hdrRow >= 0) {
+          (raw[hdrRow]||[]).forEach((v,i) => {
+            if (/matr[íi]cula|license.*plate|plate/i.test(String(v||''))) matCol = i;
+          });
+          if (matCol >= 0) {
+            for (let i = hdrRow+1; i < raw.length; i++) {
+              const mat = String((raw[i]||[])[matCol]||'').trim();
+              if (mat && mat.length > 3) portaData.add(norm(mat));
+            }
+          }
+        }
+      }
+
+      if (!portaData.size) throw new Error('Não foi possível extrair matrículas. Verifica que é o relatório de Portas Digitais exportado do Geotab.');
+
+      setDzDone('dz-porta', 'dz-porta-name', file.name, `${portaData.size} viaturas com porta`);
+      document.getElementById('lc-porta').classList.add('loaded');
+    } catch(err) { setLoaderErr('Erro Portas: ' + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// Aplicar dados de porta aos veículos
+function applyPortaData() {
+  if (!portaData.size) return;
+  ALL_VEHICLES.forEach((v, i) => {
+    const mn = norm(v.mat), pn = norm(v.plate||'');
+    const temPorta = portaData.has(mn) || portaData.has(pn);
+    if (temPorta) {
+      ALL_VEHICLES[i] = { ...v, portaOK: true, msgPorta: '' };
+      if (edits[i]?.porta === 'REVER S.Porta') edits[i] = { ...(edits[i]||{}), porta: '' };
+    } else {
+      ALL_VEHICLES[i] = { ...v, portaOK: false, msgPorta: 'REVER S.Porta' };
+      edits[i] = { ...(edits[i]||{}), porta: 'REVER S.Porta' };
+    }
+  });
+}
+function applyPosData() {
+  if (!Object.keys(posData).length) return;
+  let updated = 0;
+  ALL_VEHICLES.forEach((v, i) => {
+    const mn = norm(v.mat), pn = norm(v.plate||'');
+    const pd = posData[mn] || posData[pn];
+    if (!pd) return; // Sem dados de posição → não toca
+
+    if (pd.days <= 1) {
+      // Sinal OK (hoje/ontem) → marcar GPS ok
+      ALL_VEHICLES[i] = { ...v, gpsOK: true, msgGPS: '' };
+      if (edits[i]?.gps === 'REVER GPS' || edits[i]?.gps === 'Instalar GPS') {
+        edits[i] = { ...(edits[i]||{}), gps: '' };
+      }
+    } else if (pd.days <= 7) {
+      // 2-7 dias → REVER GPS
+      ALL_VEHICLES[i] = { ...v, gpsOK: false, msgGPS: 'REVER GPS' };
+      edits[i] = { ...(edits[i]||{}), gps: 'REVER GPS' };
+    }
+    // 8+ dias → manter classificação do Supabase, não alterar
+    updated++;
+  });
+  console.log(`Posições aplicadas: ${updated} veículos`);
+}
+
+// ── ARRANCAR VIA SUPABASE + FICHEIRO DE POSIÇÕES ──────────────────────────────
+async function startFromPos() {
+  if (!Object.keys(posData).length) { setLoaderErr('Carrega primeiro o ficheiro de Última Posição.'); return; }
+  const btn = document.getElementById('btn-start-pos');
+  btn.textContent = '⏳ A carregar Supabase...'; btn.disabled = true;
+  setLoaderErr('');
+  try {
+    const sb = getSB();
+    const r = await sb.from('fleet_weekly').select('week_num,year,date,vehicles').order('year',{ascending:false}).order('week_num',{ascending:false}).limit(1);
+    if (r.error || !r.data || !r.data.length) throw new Error('Não foi possível carregar dados do Supabase. Verifica a ligação.');
+    const w = r.data[0];
+    ALL_VEHICLES = w.vehicles || [];
+    if (!ALL_VEHICLES.length) throw new Error('Sem veículos no Supabase. Carrega o Base JSON primeiro.');
+    edits = ls(K_EDITS) || {};
+    const wn = w.week_num + 1; // Próxima semana
+    const yr = w.year;
+    meta = { week: `Sem ${wn} · ${yr}`, date: new Date().toLocaleDateString('pt-PT'), weekNum: wn, year: yr };
+    applyPosData();
+    applyPortaData();
+    ls(K_VEHICLES, ALL_VEHICLES); ls(K_EDITS, edits); ls(K_META, meta);
+    btn.textContent = '📍 Supabase + Posições'; btn.disabled = false;
+    openDashboard();
+  } catch(err) {
+    btn.textContent = '📍 Supabase + Posições'; btn.disabled = false;
+    setLoaderErr('Erro: ' + err.message);
+  }
 }
 
 // ── LOADER FILE PARSING ───────────────────────────────────────────────────────
@@ -901,10 +1041,73 @@ function loadBase(file) {
   reader.readAsArrayBuffer(file);
 }
 
+let posData = {}; // norm(mat) → { days, ok }
+
 function loadPos(file) {
-  // Just mark as loaded for now — positions can be added later
-  setDzDone('dz-pos', 'dz-pos-name', file.name, 'carregado');
-  document.getElementById('lc2').classList.add('loaded');
+  if (!file) return;
+  setLoaderErr('');
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type:'array', cellDates:true });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json(ws, { header:1, defval:null });
+
+      // Detetar linha de cabeçalho — aceita variantes com/sem acento, case insensitive
+      let hdrRow = -1;
+      for (let i = 0; i < Math.min(raw.length, 15); i++) {
+        const joined = (raw[i]||[]).map(v => String(v||'')).join('|');
+        if (/ve[íi]culo/i.test(joined)) { hdrRow = i; break; }
+      }
+      // Fallback: linha 6 é o cabeçalho padrão do relatório Geotab
+      if (hdrRow < 0) hdrRow = 6;
+
+      const hdr = raw[hdrRow] || [];
+      let veicCol = -1, dataCol = -1;
+      hdr.forEach((v,i) => {
+        const s = String(v||'').trim();
+        if (/ve[íi]culo/i.test(s) || s === 'Vehicle') veicCol = i;
+        if (/^data$/i.test(s) || s === 'Date') dataCol = i;
+      });
+      // Fallback para posições conhecidas do formato Geotab
+      if (veicCol < 0) veicCol = 4;
+      if (dataCol < 0) dataCol = 1;
+
+      posData = {};
+      const hoje = new Date();
+      hoje.setHours(0,0,0,0);
+      let count = 0;
+
+      for (let i = hdrRow+1; i < raw.length; i++) {
+        const row = raw[i]; if (!row) continue;
+        const mat = String(row[veicCol]||'').trim();
+        if (!mat || mat === 'nan' || /^ve[íi]culo$/i.test(mat)) continue;
+
+        let days = 99;
+        if (row[dataCol]) {
+          let d = row[dataCol] instanceof Date ? row[dataCol] : new Date(row[dataCol]);
+          if (!isNaN(d)) { d.setHours(0,0,0,0); days = Math.round((hoje - d) / (1000*60*60*24)); }
+        }
+        posData[norm(mat)] = { days };
+        count++;
+      }
+
+      const ok0 = Object.values(posData).filter(v=>v.days <= 1).length;
+      const rev = Object.values(posData).filter(v=>v.days > 1 && v.days <= 7).length;
+      const old = Object.values(posData).filter(v=>v.days > 7).length;
+      setDzDone('dz-pos', 'dz-pos-name', file.name,
+        `${count} veículos · ✅ ${ok0} OK · ⚠️ ${rev} REVER · ❓ ${old} mant.`);
+      document.getElementById('lc2').classList.add('loaded');
+
+      if (!ALL_VEHICLES.length) {
+        document.getElementById('btn-start-pos').style.display = 'inline-block';
+        document.getElementById('btn-start').classList.remove('ready');
+      } else {
+        checkStartReady();
+      }
+    } catch(err) { setLoaderErr('Erro Posições: ' + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 function stageOf(idx, file) {
@@ -970,6 +1173,12 @@ function startDashboard() {
   if (stagedLookups[0] || stagedLookups[1]) {
     applyLookups(stagedLookups[0], stagedLookups[1]);
   }
+
+  // Apply position data if loaded
+  applyPosData();
+
+  // Apply door sensor data if loaded
+  applyPortaData();
 
   // Save to localStorage
   ls(K_VEHICLES, ALL_VEHICLES);
@@ -1460,7 +1669,7 @@ document.addEventListener('click', e => {
 });
 
 // ── LOADER: drag & drop for new cards ─────────────────────────────────────────
-[['dz-rem', fi => loadRemover(fi)], ['dz-notes', fi => loadNotas(fi)]].forEach(([dzId, fn]) => {
+[['dz-rem', fi => loadRemover(fi)], ['dz-notes', fi => loadNotas(fi)], ['dz-porta', fi => loadPortas(fi)]].forEach(([dzId, fn]) => {
   const dz = document.getElementById(dzId);
   if (!dz) return;
   dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
@@ -1742,21 +1951,22 @@ function genStagePos(file) {
       const wb = XLSX.read(e.target.result, { type:'array', cellDates:true });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const raw = XLSX.utils.sheet_to_json(ws, { header:1, defval:null });
-      // Find header row with "Veículo"
+      // Find header row with "Veículo" — robusta, aceita variantes com/sem acento
       let hdr = -1;
-      for (let i = 0; i < raw.length; i++) {
-        if ((raw[i]||[]).join('|').includes('Veículo')) { hdr = i; break; }
+      for (let i = 0; i < Math.min(raw.length, 15); i++) {
+        if (/ve[íi]culo/i.test((raw[i]||[]).map(v=>String(v||'')).join('|'))) { hdr = i; break; }
       }
-      if (hdr < 0) throw new Error('Formato não reconhecido.');
-      const h = raw[hdr];
+      if (hdr < 0) hdr = 6; // fallback: linha 6 padrão Geotab
+      const h = raw[hdr] || [];
       let vCol=-1, dCol=-1, hCol=-1;
       h.forEach((v,i) => {
         const s = String(v||'').trim();
-        if (s === 'Veículo') vCol = i;
-        if (s === 'Data') dCol = i;
-        if (s === 'Hora') hCol = i;
+        if (/ve[íi]culo/i.test(s) || s === 'Vehicle') vCol = i;
+        if (/^data$/i.test(s) || s === 'Date') dCol = i;
+        if (/^hora$/i.test(s) || s === 'Time') hCol = i;
       });
-      if (vCol < 0) throw new Error('Coluna Veículo não encontrada.');
+      if (vCol < 0) vCol = 4; // fallback posição conhecida Geotab
+      if (dCol < 0) dCol = 1;
 
       genPosData = {};
       for (let i = hdr+1; i < raw.length; i++) {
@@ -1815,16 +2025,23 @@ function genStagePorta(file) {
   reader.onload = e => {
     dz.innerHTML = '<div class="dz-icon">📂</div><div style="font-size:12px">Relatório_de_portas_digitais*.pdf</div>';
     try {
-      // For PDF: we read as ArrayBuffer and use a simple regex on text content
-      // Since XLSX can't read PDF, we need to extract text from the binary
-      const bytes = new Uint8Array(e.target.result);
-      const text = new TextDecoder('utf-8', { fatal:false }).decode(bytes);
-      // Extract vehicle plates from PDF text stream
-      const matches = [...text.matchAll(/Matricula[:\s]+([A-Z0-9\-\.]+)\s*-\s*S\.Porta/gi)];
-      if (matches.length === 0) {
-        // Try alternative: extract from visible text patterns in PDF
-        const altMatches = [...text.matchAll(/\b([A-Z]{1,2}-\d{6}|[A-Z]{2}-\d{5}|\d{2}-[A-Z]{2}-\d{2}|[A-Z]{2}-\d{2}-[A-Z]{2}|[A-Z]+\d+[A-Z]*)\b/g)];
-        throw new Error('PDF não legível directamente. Exporta como Excel se possível, ou usa o ficheiro XLS.');
+      // Tentativa 1: UTF-8
+      let text = new TextDecoder('utf-8', { fatal:false }).decode(bytes);
+      let matches = [...text.matchAll(/Matricula[:\s]+([A-Z0-9\-]+)\s*[-–]\s*S[\.\s]?Porta/gi)];
+
+      // Tentativa 2: Latin-1 (melhor para PDFs mais antigos)
+      if (!matches.length) {
+        text = new TextDecoder('iso-8859-1', { fatal:false }).decode(bytes);
+        matches = [...text.matchAll(/Matricula[:\s]+([A-Z0-9\-]+)\s*[-–]\s*S[\.\s]?Porta/gi)];
+      }
+
+      // Tentativa 3: regex mais lato — encontrar matrículas perto de "S.Porta" ou "S. Porta"
+      if (!matches.length) {
+        matches = [...text.matchAll(/([A-Z]{1,3}[-\s]?\d{5,6}|[A-Z]{2}[-\s]\d{2}[-\s][A-Z]{2}|\d{2}[-\s][A-Z]{2}[-\s]\d{2}|[A-Z]{2}[-\s]\d{2}[-\s][A-Z]{2})\s*[-–]\s*S[\.\s]?[Pp]orta/g)];
+      }
+
+      if (!matches.length) {
+        throw new Error('PDF não legível directamente. Exporta o relatório como Excel no Geotab e usa o card "Portas Digitais" no ecrã de carregamento.');
       }
       genPortaSet = new Set(matches.map(m => norm(m[1])));
       const count = genPortaSet.size;
