@@ -592,7 +592,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
         <div class="card" style="margin-bottom:0">
           <div class="card-title">🚪 Relatório de Portas Digitais <span style="color:var(--red)">*</span></div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:.75rem">Mesmo período — detecta porta e temperatura</div>
-          <div class="dz" id="gen-dz-porta" onclick="document.getElementById('gen-fi-porta').click()"><div class="dz-icon">📂</div><div style="font-size:12px">Relatório_de_portas_digitais*.pdf</div></div>
+          <div class="dz" id="gen-dz-porta" onclick="document.getElementById('gen-fi-porta').click()"><div class="dz-icon">📂</div><div style="font-size:12px">Relatório_de_portas_digitais*.pdf / *.xlsx</div></div>
           <input type="file" id="gen-fi-porta" accept=".pdf,.xlsx,.xls" style="display:none" onchange="genStagePorta(this.files[0])">
           <div class="op-staged" id="gen-st-porta" style="margin-top:8px"></div>
         </div>
@@ -734,6 +734,13 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+// Configurar PDF.js worker
+if (typeof pdfjsLib !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+</script>
 <script>
 const SUPABASE_URL = 'https://lwujmvvphbxwdowkrzye.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3dWptdnZwaGJ4d2Rvd2tyenllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5MTU5MjMsImV4cCI6MjA5NDQ5MTkyM30.lf1FKZk4pxRbiaNRRABQuDvLWUuPjrXRVumxoy6-uAI';
@@ -2019,45 +2026,90 @@ function genStagePos(file) {
 
 function genStagePorta(file) {
   const dz = document.getElementById('gen-dz-porta');
+  const resultEl = document.getElementById('gen-result');
   dz.innerHTML = '<div style="font-size:13px;color:var(--muted)">A ler...</div>';
-  // PDF - use text extraction via FileReader
-  const reader = new FileReader();
-  reader.onload = e => {
-    dz.innerHTML = '<div class="dz-icon">📂</div><div style="font-size:12px">Relatório_de_portas_digitais*.pdf</div>';
-    try {
-      // Tentativa 1: UTF-8
-      let text = new TextDecoder('utf-8', { fatal:false }).decode(bytes);
-      let matches = [...text.matchAll(/Matricula[:\s]+([A-Z0-9\-]+)\s*[-–]\s*S[\.\s]?Porta/gi)];
 
-      // Tentativa 2: Latin-1 (melhor para PDFs mais antigos)
-      if (!matches.length) {
-        text = new TextDecoder('iso-8859-1', { fatal:false }).decode(bytes);
-        matches = [...text.matchAll(/Matricula[:\s]+([A-Z0-9\-]+)\s*[-–]\s*S[\.\s]?Porta/gi)];
-      }
+  const isPDF = file.name.toLowerCase().endsWith('.pdf');
+  const dzPlaceholder = '<div class="dz-icon">📂</div><div style="font-size:12px">Relatório_de_portas_digitais*.pdf / *.xlsx</div>';
 
-      // Tentativa 3: regex mais lato — encontrar matrículas perto de "S.Porta" ou "S. Porta"
-      if (!matches.length) {
-        matches = [...text.matchAll(/([A-Z]{1,3}[-\s]?\d{5,6}|[A-Z]{2}[-\s]\d{2}[-\s][A-Z]{2}|\d{2}[-\s][A-Z]{2}[-\s]\d{2}|[A-Z]{2}[-\s]\d{2}[-\s][A-Z]{2})\s*[-–]\s*S[\.\s]?[Pp]orta/g)];
-      }
+  function applyPortaResult(plates, fname) {
+    if (!plates.size) throw new Error('Nenhuma matrícula encontrada no ficheiro.');
+    genPortaSet = plates;
+    const count = plates.size;
+    const st = document.getElementById('gen-st-porta');
+    st.innerHTML = `<span style="font-size:14px">✅</span><span class="op-staged-name"><strong>${fname}</strong> · ${count} viaturas com sensor activo</span>`;
+    st.style.display = 'flex';
+    dz.classList.add('done');
+    dz.innerHTML = `<div style="font-size:16px">✅</div><div style="font-weight:500;font-size:12px">${count} viaturas</div>`;
+    genCheckReady();
+  }
 
-      if (!matches.length) {
-        throw new Error('PDF não legível directamente. Exporta o relatório como Excel no Geotab e usa o card "Portas Digitais" no ecrã de carregamento.');
-      }
-      genPortaSet = new Set(matches.map(m => norm(m[1])));
-      const count = genPortaSet.size;
-      const st = document.getElementById('gen-st-porta');
-      st.innerHTML = `<span style="font-size:14px">✅</span><span class="op-staged-name"><strong>${file.name}</strong> · ${count} viaturas com sensor activo</span>`;
-      st.style.display = 'flex';
-      dz.classList.add('done');
-      dz.innerHTML = `<div style="font-size:16px">✅</div><div style="font-weight:500;font-size:12px">${count} viaturas</div>`;
-      genCheckReady();
-    } catch(err) {
-      dz.innerHTML = '<div class="dz-icon">📂</div><div style="font-size:12px">Relatório_de_portas_digitais*.pdf</div>';
-      document.getElementById('gen-result').innerHTML = `<div style="background:var(--amber-dim);border:1px solid rgba(245,158,11,.25);border-radius:var(--r);padding:.75rem 1rem;font-size:12px;color:#fcd34d">⚠️ ${err.message}</div>`;
-      document.getElementById('gen-result').style.display = 'block';
-    }
-  };
-  reader.readAsArrayBuffer(file);
+  function showPortaErr(msg) {
+    dz.innerHTML = dzPlaceholder;
+    resultEl.innerHTML = `<div style="background:var(--amber-dim);border:1px solid rgba(245,158,11,.25);border-radius:var(--r);padding:.75rem 1rem;font-size:12px;color:#fcd34d">⚠️ ${msg}</div>`;
+    resultEl.style.display = 'block';
+  }
+
+  if (isPDF) {
+    // Usar PDF.js para extração correcta (lida com streams comprimidos)
+    const reader = new FileReader();
+    reader.onload = async e => {
+      dz.innerHTML = dzPlaceholder;
+      try {
+        if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js não carregado. Tenta exportar como Excel no Geotab.');
+        const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(e.target.result) }).promise;
+        let fullText = '';
+        for (let p = 1; p <= pdf.numPages; p++) {
+          const page = await pdf.getPage(p);
+          const tc = await page.getTextContent();
+          fullText += tc.items.map(i => i.str).join(' ') + '\n';
+        }
+        // Extrair matrículas com sensor de porta
+        const matches = [...fullText.matchAll(/Matricula[:\s]*([A-Z0-9\-]+)\s*[-–]\s*S[\.\s]?Porta/gi)];
+        const plates = new Set(matches.map(m => norm(m[1])));
+        applyPortaResult(plates, file.name);
+      } catch(err) { showPortaErr('PDF: ' + err.message); }
+    };
+    reader.readAsArrayBuffer(file);
+
+  } else {
+    // XLS/XLSX — mesma lógica de loadPortas()
+    const reader = new FileReader();
+    reader.onload = e => {
+      dz.innerHTML = dzPlaceholder;
+      try {
+        const wb = XLSX.read(e.target.result, { type:'array', cellDates:true });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const raw = XLSX.utils.sheet_to_json(ws, { header:1, defval:null });
+        const plates = new Set();
+        const plateRe = /[Mm]atricula[:\s]+([A-Z0-9\-]+)/;
+        for (const row of raw) {
+          for (const cell of (row||[])) {
+            const m = String(cell||'').match(plateRe);
+            if (m) plates.add(norm(m[1]));
+          }
+        }
+        if (!plates.size) {
+          // Tentar coluna de matrícula
+          let hdrRow = -1, matCol = -1;
+          for (let i = 0; i < Math.min(raw.length,10); i++) {
+            if (/matr[íi]cula|plate/i.test((raw[i]||[]).join('|'))) { hdrRow = i; break; }
+          }
+          if (hdrRow >= 0) {
+            (raw[hdrRow]||[]).forEach((v,i) => { if (/matr[íi]cula|plate/i.test(String(v||''))) matCol = i; });
+            if (matCol >= 0) {
+              for (let i = hdrRow+1; i < raw.length; i++) {
+                const mat = String((raw[i]||[])[matCol]||'').trim();
+                if (mat && mat.length > 3) plates.add(norm(mat));
+              }
+            }
+          }
+        }
+        applyPortaResult(plates, file.name);
+      } catch(err) { showPortaErr('XLS: ' + err.message); }
+    };
+    reader.readAsArrayBuffer(file);
+  }
 }
 
 function generateBaseJSON() {
