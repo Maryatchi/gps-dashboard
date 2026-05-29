@@ -1159,7 +1159,7 @@ function parseOficinaXlsx(arrayBuffer) {
   hdr.forEach((v,i) => {
     const s = String(v||'').trim();
     if (s==='Matrícula'||s==='Matricula') matCol = i;
-    if (s==='Tipo') tipoCol = i;
+    if (s==='Tipo'||s==='Oficina ou Sinistro'||s==='Oficina/Sinistro'||s==='Tipo Oficina') tipoCol = i;
   });
   if (matCol < 0) throw new Error('Formato inválido.');
   const lookup = {};
@@ -1167,7 +1167,8 @@ function parseOficinaXlsx(arrayBuffer) {
     const row = raw[i]; if (!row) continue;
     const mat = String(row[matCol]||'').trim();
     if (!mat || mat === 'Matrícula' || mat === 'nan') continue;
-    const tipo = tipoCol >= 0 ? String(row[tipoCol]||'Oficina').trim() : 'Oficina';
+    const tipoRaw = tipoCol >= 0 ? String(row[tipoCol]||'Oficina').trim() : 'Oficina';
+    const tipo = tipoRaw.toLowerCase().includes('sinistro') ? 'Sinistro' : 'Oficina';
     lookup[norm(mat)] = tipo;
   }
   return lookup;
