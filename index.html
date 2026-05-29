@@ -1487,7 +1487,10 @@ function applyLookups(l1, l2) {
     const mk=merged[mn]!==undefined?mn:(merged[pn]!==undefined?pn:null);
     const cur=(edits[i]?.obs!==undefined)?edits[i].obs:v.obs;
     if(mk){ const no=merged[mk]; if(cur!==no){edits[i]={...(edits[i]||{}),obs:no};} }
-    else if(cur==='Oficina'||cur==='Sinistro'){edits[i]={...(edits[i]||{}),obs:''};}
+    // Só limpa Oficina se o ficheiro 1 (diário) foi carregado e o veículo não está nele
+    else if(cur==='Oficina' && l1 && !l1[mn] && !l1[pn]){edits[i]={...(edits[i]||{}),obs:''};}
+    // Só limpa Sinistro se o ficheiro 2 (JSP/paragens longas) foi carregado e o veículo não está nele
+    else if(cur==='Sinistro' && l2 && !l2[mn] && !l2[pn]){edits[i]={...(edits[i]||{}),obs:''};}
   });
 }
 
@@ -1505,7 +1508,10 @@ function applyOpFiles() {
     const mk=merged[mn]!==undefined?mn:(merged[pn]!==undefined?pn:null);
     const cur=(edits[i]?.obs!==undefined)?edits[i].obs:v.obs;
     if(mk){const no=merged[mk];if(!cur){edits[i]={...(edits[i]||{}),obs:no};added++;}else if(cur!==no){edits[i]={...(edits[i]||{}),obs:no};updated++;}else unchanged++;}
-    else if(cur==='Oficina'||cur==='Sinistro'){edits[i]={...(edits[i]||{}),obs:''};removed++;}
+    // Só limpa Oficina se o ficheiro 1 (diário) foi carregado e o veículo não está nele
+    else if(cur==='Oficina' && stagedLookups[0] && !stagedLookups[0][mn] && !stagedLookups[0][pn]){edits[i]={...(edits[i]||{}),obs:''};removed++;}
+    // Só limpa Sinistro se o ficheiro 2 (JSP/paragens longas) foi carregado e o veículo não está nele
+    else if(cur==='Sinistro' && stagedLookups[1] && !stagedLookups[1][mn] && !stagedLookups[1][pn]){edits[i]={...(edits[i]||{}),obs:''};removed++;}
   });
   upBadge(); renderAll();
   ls(K_OFICINAS,{l1:stagedLookups[0],l2:stagedLookups[1]});
