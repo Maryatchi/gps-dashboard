@@ -1220,8 +1220,8 @@ function getEff(v,i) { const e=edits[i]; if(!e)return v; return{...v,obs:e.obs!=
 // Iso: sem sensor de temperatura (tem porta)
 // Frio: tem porta e temperatura
 // Oficina/Sinistro: excluídos da % GPS activo
-const hasPorta = v => v.tipo !== 'Lona';
-const hasTemp  = v => v.tipo !== 'Lona' && v.tipo !== 'Iso';
+const hasPorta = v => v.tipo !== 'Lona' && v.tipo !== 'Tractor';
+const hasTemp  = v => v.tipo !== 'Lona' && v.tipo !== 'Iso' && v.tipo !== 'Tractor';
 const isAtivo  = v => !['Oficina','Sinistro'].includes(v.obs);
 function regMatch(v) { if(currentRegion==='ALL')return true; if(currentRegion==='NORTE_PDTN')return v.regiao==='Norte'||v.regiao==='PDTN'; return v.regiao===currentRegion; }
 function getFilt() {
@@ -1541,7 +1541,8 @@ function applyOpFiles() {
 function getRegionStats(reg) {
   const lst=ALL_VEHICLES.map((v,i)=>getEff(v,i)).filter(v=>reg==='ALL'?true:reg==='NORTE_PDTN'?v.regiao==='Norte'||v.regiao==='PDTN':v.regiao===reg);
   const t=lst.length||1;
-  return { gps:+(lst.filter(v=>v.gpsOK).length/t*100).toFixed(1), porta:+(lst.filter(v=>v.portaOK).length/t*100).toFixed(1), temp:+(lst.filter(v=>v.tempOK).length/t*100).toFixed(1), volt:+(lst.filter(v=>v.voltOK).length/t*100).toFixed(1) };
+  const tP=lst.filter(hasPorta).length||1; const tT=lst.filter(hasTemp).length||1;
+  return { gps:+(lst.filter(v=>v.gpsOK).length/t*100).toFixed(1), porta:+(lst.filter(v=>v.portaOK&&hasPorta(v)).length/tP*100).toFixed(1), temp:+(lst.filter(v=>v.tempOK&&hasTemp(v)).length/tT*100).toFixed(1), volt:+(lst.filter(v=>v.voltOK).length/t*100).toFixed(1) };
 }
 async function saveWeek() {
   const norte=getRegionStats('Norte'), pdtn=getRegionStats('PDTN');
@@ -1636,8 +1637,8 @@ function exportExcel() {
     ['REVER Bateria',d.filter(v=>v.msgVolt==='REVER Bateria').length],[''],
     ['SISTEMAS','%','OK','Total'],
     ['GPS',Math.round(d.filter(v=>v.gpsOK).length/t*100)+'%',d.filter(v=>v.gpsOK).length,t],
-    ['Porta',Math.round(d.filter(v=>v.portaOK).length/t*100)+'%',d.filter(v=>v.portaOK).length,t],
-    ['Temperaturas',Math.round(d.filter(v=>v.tempOK).length/t*100)+'%',d.filter(v=>v.tempOK).length,t],
+    ['Porta',Math.round(d.filter(v=>v.portaOK&&hasPorta(v)).length/Math.max(d.filter(hasPorta).length,1)*100)+'%',d.filter(v=>v.portaOK&&hasPorta(v)).length,d.filter(hasPorta).length],
+    ['Temperaturas',Math.round(d.filter(v=>v.tempOK&&hasTemp(v)).length/Math.max(d.filter(hasTemp).length,1)*100)+'%',d.filter(v=>v.tempOK&&hasTemp(v)).length,d.filter(hasTemp).length],
     ['Voltagem',Math.round(d.filter(v=>v.voltOK).length/t*100)+'%',d.filter(v=>v.voltOK).length,t],
   ];
   const ws1=XLSX.utils.aoa_to_sheet(resumo);ws1['!cols']=[{wch:28},{wch:12},{wch:10},{wch:10}];XLSX.utils.book_append_sheet(wb,ws1,'Resumo');
