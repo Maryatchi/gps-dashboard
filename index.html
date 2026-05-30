@@ -165,6 +165,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .eopt.sel-none{background:var(--green-dim);border-color:rgba(34,197,94,.3);color:#86efac}
 .eopt.sel-red{background:var(--red-dim);border-color:rgba(239,68,68,.4);color:#fca5a5}
 .eopt.sel-amber{background:var(--amber-dim);border-color:rgba(245,158,11,.4);color:#fcd34d}
+.eopt.sel-blue{background:var(--blue-dim);border-color:rgba(59,130,246,.4);color:#93c5fd}
+.eopt.sel-gray{background:rgba(107,114,128,.12);border-color:rgba(107,114,128,.35);color:#9ca3af}
 .notes-input{width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:10px 12px;outline:none;resize:vertical;min-height:80px;transition:border-color .2s;line-height:1.5}
 .notes-input:focus{border-color:var(--blue)}.notes-input::placeholder{color:var(--hint)}
 .modal-footer{padding:1rem 1.5rem;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end}
@@ -671,10 +673,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     </div>
     <div class="modal-body">
       <div class="current-info" id="m-info"></div>
-      <div class="edit-section"><div class="edit-label">Observações / Estado</div><div class="edit-options" id="m-obs"><button class="eopt" data-val="" onclick="sel(this,'obs')">Nenhuma</button><button class="eopt" data-val="Oficina" onclick="sel(this,'obs')">🔧 Oficina</button><button class="eopt" data-val="Sinistro" onclick="sel(this,'obs')">⚠️ Sinistro</button><button class="eopt" data-val="Aguardar" onclick="sel(this,'obs')">⏳ Aguardar</button><button class="eopt" data-val="Resolvido" onclick="sel(this,'obs')">✅ Resolvido</button></div></div>
+      <div class="edit-section"><div class="edit-label">Observações / Estado</div><div class="edit-options" id="m-obs"><button class="eopt" data-val="" onclick="sel(this,'obs')">Nenhuma</button><button class="eopt" data-val="Oficina" onclick="sel(this,'obs')">🔧 Oficina</button><button class="eopt" data-val="Sinistro" onclick="sel(this,'obs')">⚠️ Sinistro</button><button class="eopt" data-val="Aguardar" onclick="sel(this,'obs')">⏳ Aguardar</button><button class="eopt" data-val="Resolvido" onclick="sel(this,'obs')">✅ Resolvido</button><button class="eopt" data-val="Removida" onclick="sel(this,'obs')">🗑 Removida</button></div></div>
       <div class="edit-section"><div class="edit-label">GPS</div><div class="edit-options" id="m-gps"><button class="eopt" data-val="" onclick="sel(this,'gps')">Nenhuma</button><button class="eopt" data-val="Instalar GPS" onclick="sel(this,'gps')">Instalar GPS</button><button class="eopt" data-val="REVER GPS" onclick="sel(this,'gps')">REVER GPS</button><button class="eopt" data-val="GPS OK" onclick="sel(this,'gps')">GPS OK</button></div></div>
       <div class="edit-section"><div class="edit-label">Porta</div><div class="edit-options" id="m-porta"><button class="eopt" data-val="" onclick="sel(this,'porta')">Nenhuma</button><button class="eopt" data-val="REVER S.Porta" onclick="sel(this,'porta')">REVER S.Porta</button><button class="eopt" data-val="Porta OK" onclick="sel(this,'porta')">Porta OK</button></div></div>
       <div class="edit-section"><div class="edit-label">Temperatura</div><div class="edit-options" id="m-temp"><button class="eopt" data-val="" onclick="sel(this,'temp')">Nenhuma</button><button class="eopt" data-val="REVER Temperaturas" onclick="sel(this,'temp')">REVER Temperaturas</button><button class="eopt" data-val="Temp OK" onclick="sel(this,'temp')">Temp OK</button></div></div>
+      <div class="edit-section"><div class="edit-label">Tipologia</div><div class="edit-options" id="m-tipo"><button class="eopt" data-val="" onclick="sel(this,'galera')">Nenhuma</button><button class="eopt" data-val="Frio" onclick="sel(this,'galera')">🧊 Frio</button><button class="eopt" data-val="Iso" onclick="sel(this,'galera')">❄️ Iso</button><button class="eopt" data-val="Lona" onclick="sel(this,'galera')">🏕️ Lona</button></div></div>
       <div class="edit-section"><div class="edit-label">Notas</div><textarea class="notes-input" id="m-notes" placeholder="Notas sobre este veículo..."></textarea></div>
     </div>
     <div class="modal-footer">
@@ -819,6 +822,7 @@ const K_EDITS     = 'fleet_edits_v2';
 const K_META      = 'fleet_meta_v2';
 const K_HISTORY   = 'fleet_history_v2';
 const K_OFICINAS  = 'fleet_oficinas_v2'; // staged oficina lookups
+const K_MIGR_GALERA = 'fleet_migr_galera_v1'; // migração única: notas → tipologia
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
 let ALL_VEHICLES = [];
@@ -1196,11 +1200,42 @@ function startDashboard() {
   openDashboard();
 }
 
+function migrateGaleraFromNotes() {
+  if (ls(K_MIGR_GALERA)) return; // já correu — não repetir
+  let count = 0;
+  ALL_VEHICLES.forEach((v, i) => {
+    const e = edits[i] || {};
+    if (e.galera) return; // tipologia já definida — não tocar
+    const notes = (e.notes !== undefined ? e.notes : v.notes || '').trim();
+    if (!notes) return;
+    // detetar tipo (case-insensitive, palavra completa ou início de nota)
+    const lower = notes.toLowerCase();
+    let galera = '';
+    if (/\bfrio\b/.test(lower))            galera = 'Frio';
+    else if (/\blona\b/.test(lower))       galera = 'Lona';
+    else if (/\bisot[eé]rmic[ao]\b/.test(lower) || /\biso\b/.test(lower)) galera = 'Iso';
+    if (!galera) return;
+    // limpar a palavra das notas, preservando o resto
+    const cleaned = notes
+      .replace(/\bfrio\b/gi, '')
+      .replace(/\blona\b/gi, '')
+      .replace(/\bisot[eé]rmic[ao]\b/gi, '')
+      .replace(/\biso\b/gi, '')
+      .replace(/^\s*[·\-,;]+\s*/,'').replace(/\s*[·\-,;]+\s*$/,'') // limpar separadores soltos no início/fim
+      .replace(/\s{2,}/g,' ').trim();
+    edits[i] = { ...e, galera, notes: cleaned };
+    count++;
+  });
+  if (count > 0) { saveEdits(); console.log(`[migração] ${count} viaturas: tipologia extraída das notas`); }
+  ls(K_MIGR_GALERA, true); // marcar como concluída
+}
+
 function openDashboard() {
   document.getElementById('loader').style.display = 'none';
   document.getElementById('dashboard').style.display = 'block';
   document.getElementById('week-badge').textContent = meta.week;
   edits = ls(K_EDITS) || edits;
+  migrateGaleraFromNotes();
   upBadge();
   renderAll();
 }
@@ -1214,7 +1249,7 @@ function goToLoader() {
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 function norm(s) { return String(s||'').toUpperCase().replace(/-/g,'').replace(/\s/g,'').trim(); }
 function getWeekNum(d) { d=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())); d.setUTCDate(d.getUTCDate()+4-(d.getUTCDay()||7)); return Math.ceil((((d-new Date(Date.UTC(d.getUTCFullYear(),0,1)))/86400000)+1)/7); }
-function getEff(v,i) { const e=edits[i]; if(!e)return v; return{...v,obs:e.obs!==undefined?e.obs:v.obs,msgGPS:e.gps!==undefined?e.gps:v.msgGPS,msgPorta:e.porta!==undefined?e.porta:v.msgPorta,msgTemp:e.temp!==undefined?e.temp:v.msgTemp,notes:e.notes||v.notes||''}; }
+function getEff(v,i) { const e=edits[i]; if(!e)return v; return{...v,obs:e.obs!==undefined?e.obs:v.obs,msgGPS:e.gps!==undefined?e.gps:v.msgGPS,msgPorta:e.porta!==undefined?e.porta:v.msgPorta,msgTemp:e.temp!==undefined?e.temp:v.msgTemp,notes:e.notes||v.notes||'',tipo:e.galera?e.galera:v.tipo}; }
 // Regras de equipamento por tipo de galera:
 // Lona: sem sensor de porta nem temperatura
 // Iso: sem sensor de temperatura (tem porta)
@@ -1435,17 +1470,17 @@ function openEdit(i) {
     '<div class="ci-row"><span class="ci-key">Porta</span><span class="ci-val">'+(v.msgPorta||'—')+'</span></div>'+
     '<div class="ci-row"><span class="ci-key">Temp</span><span class="ci-val">'+(v.msgTemp||'—')+'</span></div>'+
     rebStr+notesStr
-  mSel={obs:v.obs||'',gps:v.msgGPS||'',porta:v.msgPorta||'',temp:v.msgTemp||''};
+  mSel={obs:v.obs||'',gps:v.msgGPS||'',porta:v.msgPorta||'',temp:v.msgTemp||'',galera:['Frio','Iso','Lona'].includes(v.tipo)?v.tipo:''};
   hilite(); document.getElementById('m-notes').value=v.notes||'';
   document.getElementById('modal-overlay').classList.add('open');
 }
 function hilite() {
-  const map={obs:'m-obs',gps:'m-gps',porta:'m-porta',temp:'m-temp'};
-  Object.keys(map).forEach(k=>{document.querySelectorAll(`#${map[k]} .eopt`).forEach(b=>{b.className='eopt';if(b.dataset.val===mSel[k]){if(!b.dataset.val)b.classList.add('sel-none');else if(k==='obs'&&['Oficina','Sinistro'].includes(b.dataset.val))b.classList.add('sel-red');else b.classList.add('sel-amber');}});});
+  const map={obs:'m-obs',gps:'m-gps',porta:'m-porta',temp:'m-temp',galera:'m-tipo'};
+  Object.keys(map).forEach(k=>{document.querySelectorAll(`#${map[k]} .eopt`).forEach(b=>{b.className='eopt';if(b.dataset.val===mSel[k]){if(!b.dataset.val)b.classList.add('sel-none');else if(k==='obs'&&b.dataset.val==='Removida')b.classList.add('sel-gray');else if(k==='obs'&&['Oficina','Sinistro'].includes(b.dataset.val))b.classList.add('sel-red');else if(k==='galera')b.classList.add('sel-blue');else b.classList.add('sel-amber');}});});
 }
 function sel(btn,type) { mSel[type]=btn.dataset.val; hilite(); }
 function closeModal(e) { if(e&&e.target!==document.getElementById('modal-overlay'))return; document.getElementById('modal-overlay').classList.remove('open'); editingIdx=null; }
-function saveEdit() { if(editingIdx===null)return; const notes=document.getElementById('m-notes').value.trim(); edits[editingIdx]={obs:mSel.obs,gps:mSel.gps,porta:mSel.porta,temp:mSel.temp,notes}; document.getElementById('modal-overlay').classList.remove('open'); upBadge(); renderAll(); editingIdx=null; }
+function saveEdit() { if(editingIdx===null)return; const notes=document.getElementById('m-notes').value.trim(); edits[editingIdx]={obs:mSel.obs,gps:mSel.gps,porta:mSel.porta,temp:mSel.temp,galera:mSel.galera,notes}; saveEdits(); document.getElementById('modal-overlay').classList.remove('open'); upBadge(); renderAll(); editingIdx=null; }
 function clearOneEdit() { if(editingIdx!==null){delete edits[editingIdx];saveEdits();} document.getElementById('modal-overlay').classList.remove('open'); upBadge(); renderAll(); editingIdx=null; }
 function resetAllEdits() { if(confirm('Limpar TODAS as edições guardadas?\n\nEsta ação não pode ser desfeita.')){edits={};saveEdits();upBadge();renderAll();} }
 
