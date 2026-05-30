@@ -1215,6 +1215,14 @@ function goToLoader() {
 function norm(s) { return String(s||'').toUpperCase().replace(/-/g,'').replace(/\s/g,'').trim(); }
 function getWeekNum(d) { d=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())); d.setUTCDate(d.getUTCDate()+4-(d.getUTCDay()||7)); return Math.ceil((((d-new Date(Date.UTC(d.getUTCFullYear(),0,1)))/86400000)+1)/7); }
 function getEff(v,i) { const e=edits[i]; if(!e)return v; return{...v,obs:e.obs!==undefined?e.obs:v.obs,msgGPS:e.gps!==undefined?e.gps:v.msgGPS,msgPorta:e.porta!==undefined?e.porta:v.msgPorta,msgTemp:e.temp!==undefined?e.temp:v.msgTemp,notes:e.notes||v.notes||''}; }
+// Regras de equipamento por tipo de galera:
+// Lona: sem sensor de porta nem temperatura
+// Iso: sem sensor de temperatura (tem porta)
+// Frio: tem porta e temperatura
+// Oficina/Sinistro: excluídos da % GPS activo
+const hasPorta = v => v.tipo !== 'Lona';
+const hasTemp  = v => v.tipo !== 'Lona' && v.tipo !== 'Iso';
+const isAtivo  = v => !['Oficina','Sinistro'].includes(v.obs);
 function regMatch(v) { if(currentRegion==='ALL')return true; if(currentRegion==='NORTE_PDTN')return v.regiao==='Norte'||v.regiao==='PDTN'; return v.regiao===currentRegion; }
 function getFilt() {
   return ALL_VEHICLES.map((v,i)=>getEff(v,i))
@@ -1239,23 +1247,26 @@ function renderKPIs() {
   document.getElementById('k-sinistro').textContent=d.filter(v=>v.obs==='Sinistro').length;
   document.getElementById('k-install').textContent=d.filter(v=>v.msgGPS==='Instalar GPS'&&!['Oficina','Sinistro'].includes(v.obs)).length;
   document.getElementById('k-rgps').textContent=d.filter(v=>v.msgGPS==='REVER GPS'&&!['Oficina','Sinistro'].includes(v.obs)).length;
-  document.getElementById('k-porta').textContent=d.filter(v=>v.msgPorta==='REVER S.Porta').length;
-  document.getElementById('k-temp').textContent=d.filter(v=>v.msgTemp==='REVER Temperaturas').length;
-  const gok=d.filter(v=>v.gpsOK).length;
-  document.getElementById('k-gpspct').textContent=t?Math.round(gok/t*100)+'%':'—';
+  document.getElementById('k-porta').textContent=d.filter(v=>hasPorta(v)&&v.msgPorta==='REVER S.Porta').length;
+  document.getElementById('k-temp').textContent=d.filter(v=>hasTemp(v)&&v.msgTemp==='REVER Temperaturas').length;
+  const dAtivo=d.filter(isAtivo); const gok=dAtivo.filter(v=>v.gpsOK).length; const tAtivo=dAtivo.length||1;
+  document.getElementById('k-gpspct').textContent=dAtivo.length?Math.round(gok/tAtivo*100)+'%':'—';
 }
 function renderSysBars() {
   const d=getFilt(),t=d.length||1;
+  const dAtivo=d.filter(isAtivo); const tAtivo=dAtivo.length||1;
+  const dPorta=d.filter(hasPorta); const tPorta=dPorta.length||1;
+  const dTemp=d.filter(hasTemp);   const tTemp=dTemp.length||1;
   // Taco/CanBus: excluir Galeras + Tractores/Rígidos da TJA (sem autorização)
-  const dTaco = d.filter(v => v.tipo !== 'Galera' && !(v.transp === 'TJA' && (v.tipo === 'Tractor' || v.tipo === 'Rígido' || v.tipo === 'Rigido')));
+  const dTaco = d.filter(v => v.tipo !== 'Galera' && v.tipo !== 'Lona' && v.tipo !== 'Iso' && v.tipo !== 'Frio' && !(v.transp === 'TJA' && (v.tipo === 'Tractor' || v.tipo === 'Rígido' || v.tipo === 'Rigido')));
   const tTaco = dTaco.length || 1;
   const sys=[
-    {n:'GPS',        ok:d.filter(v=>v.gpsOK).length,     total:t},
-    {n:'Porta',      ok:d.filter(v=>v.portaOK).length,   total:t},
-    {n:'Temperaturas',ok:d.filter(v=>v.tempOK).length,   total:t},
-    {n:'Tacógrafo',  ok:dTaco.filter(v=>v.tacoOK).length,  total:tTaco},
-    {n:'CanBus',     ok:dTaco.filter(v=>v.canbusOK).length, total:tTaco},
-    {n:'Voltagem',   ok:d.filter(v=>v.voltOK).length,    total:t},
+    {n:'GPS',        ok:dAtivo.filter(v=>v.gpsOK).length,     total:tAtivo},
+    {n:'Porta',      ok:dPorta.filter(v=>v.portaOK).length,   total:tPorta},
+    {n:'Temperaturas',ok:dTemp.filter(v=>v.tempOK).length,    total:tTemp},
+    {n:'Tacógrafo',  ok:dTaco.filter(v=>v.tacoOK).length,     total:tTaco},
+    {n:'CanBus',     ok:dTaco.filter(v=>v.canbusOK).length,   total:tTaco},
+    {n:'Voltagem',   ok:d.filter(v=>v.voltOK).length,         total:t},
   ];
   document.getElementById('sys-bars').innerHTML=sys.map(s=>{const p=Math.round(s.ok/s.total*100);return`<div class="sys-row"><span class="sys-name">${s.n}</span><div class="track"><div class="fill" style="width:${p}%;background:${bc(p)}"></div></div><span class="sys-pct">${p}%</span><span class="sys-ct">${s.ok}/${s.total}</span></div>`;}).join('');
 }
@@ -1264,8 +1275,8 @@ function renderFleetActions() {
   const items=[
     {col:'#ef4444',title:'Instalar GPS',sub:'Sem unidade instalada',count:d.filter(v=>v.msgGPS==='Instalar GPS'&&!['Oficina','Sinistro'].includes(v.obs)).length,cls:'c-red',filter:'instalar'},
     {col:'#ef4444',title:'REVER GPS',sub:'GPS não comunica',count:d.filter(v=>v.msgGPS==='REVER GPS'&&!['Oficina','Sinistro'].includes(v.obs)).length,cls:'c-red',filter:'rever_gps'},
-    {col:'#f59e0b',title:'REVER Porta',sub:'Sensor de porta',count:d.filter(v=>v.msgPorta==='REVER S.Porta').length,cls:'c-amber',filter:'porta'},
-    {col:'#f59e0b',title:'REVER Temperatura',sub:'Sensor de temperatura',count:d.filter(v=>v.msgTemp==='REVER Temperaturas').length,cls:'c-amber',filter:'temp'},
+    {col:'#f59e0b',title:'REVER Porta',sub:'Sensor de porta',count:d.filter(v=>hasPorta(v)&&v.msgPorta==='REVER S.Porta').length,cls:'c-amber',filter:'porta'},
+    {col:'#f59e0b',title:'REVER Temperatura',sub:'Sensor de temperatura',count:d.filter(v=>hasTemp(v)&&v.msgTemp==='REVER Temperaturas').length,cls:'c-amber',filter:'temp'},
     {col:'#f59e0b',title:'REVER Bateria',sub:'Tensão baixa',count:d.filter(v=>v.msgVolt==='REVER Bateria').length,cls:'c-amber',filter:'bateria'},
     {col:'#6b7280',title:'Oficina',sub:'Em manutenção',count:d.filter(v=>v.obs==='Oficina').length,cls:'',filter:'oficina'},
     {col:'#374151',title:'Sinistro',sub:'Veículo danificado',count:d.filter(v=>v.obs==='Sinistro').length,cls:'',filter:'sinistro'},
@@ -1298,9 +1309,12 @@ function renderTransporters() {
   const entries=Object.entries(tMap).sort((a,b)=>b[1].length-a[1].length);
   const rows=entries.map(([name,vs])=>{
     const tot=vs.length;
+    const pctGps=()=>{const a=vs.filter(isAtivo);return a.length?Math.round(a.filter(v=>v.gpsOK).length/a.length*100):0;};
+    const pctPorta=()=>{const a=vs.filter(hasPorta);return a.length?Math.round(a.filter(v=>v.portaOK).length/a.length*100):0;};
+    const pctTemp=()=>{const a=vs.filter(hasTemp);return a.length?Math.round(a.filter(v=>v.tempOK).length/a.length*100):0;};
     const pct=f=>tot?Math.round(vs.filter(v=>v[f]).length/tot*100):0;
     const cnt=fn=>vs.filter(fn).length;
-    const gp=pct('gpsOK'),pp=pct('portaOK'),tp=pct('tempOK'),vp=pct('voltOK');
+    const gp=pctGps(),pp=pctPorta(),tp=pctTemp(),vp=pct('voltOK');
     const nc=(n,cls)=>n>0?`<span class="pill ${cls}">${n}</span>`:'<span style="color:var(--hint)">—</span>';
     // GPS bar mini
     const gpsNumCol=gp>=85?'#86efac':gp>=70?'#fcd34d':'#fca5a5';
@@ -1321,9 +1335,9 @@ function renderTransporters() {
   // Totals row
   const all=d;
   const atot=all.length||1;
-  const agp=Math.round(all.filter(v=>v.gpsOK).length/atot*100);
-  const app=Math.round(all.filter(v=>v.portaOK).length/atot*100);
-  const atp=Math.round(all.filter(v=>v.tempOK).length/atot*100);
+  const aAtivo=all.filter(isAtivo); const agp=aAtivo.length?Math.round(aAtivo.filter(v=>v.gpsOK).length/aAtivo.length*100):0;
+  const aPorta=all.filter(hasPorta); const app=aPorta.length?Math.round(aPorta.filter(v=>v.portaOK).length/aPorta.length*100):0;
+  const aTemp=all.filter(hasTemp);   const atp=aTemp.length?Math.round(aTemp.filter(v=>v.tempOK).length/aTemp.length*100):0;
   const avp=Math.round(all.filter(v=>v.voltOK).length/atot*100);
   const totRow=`<tr style="border-top:2px solid var(--border2);background:var(--surface3)">
     <td style="font-weight:700">TOTAL</td><td style="text-align:center;font-weight:700">${atot}</td>
@@ -1354,8 +1368,8 @@ function renderVehicles() {
   if(f==='todos_gps') idx=idx.filter(i=>!!getEff(ALL_VEHICLES[i],i).msgGPS&&noOficina(i));
   else if(f==='instalar') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgGPS==='Instalar GPS'&&noOficina(i));
   else if(f==='rever_gps') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgGPS==='REVER GPS'&&noOficina(i));
-  else if(f==='porta') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgPorta==='REVER S.Porta'&&noOficina(i));
-  else if(f==='temp') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgTemp==='REVER Temperaturas'&&noOficina(i));
+  else if(f==='porta') idx=idx.filter(i=>hasPorta(getEff(ALL_VEHICLES[i],i))&&getEff(ALL_VEHICLES[i],i).msgPorta==='REVER S.Porta'&&noOficina(i));
+  else if(f==='temp') idx=idx.filter(i=>hasTemp(getEff(ALL_VEHICLES[i],i))&&getEff(ALL_VEHICLES[i],i).msgTemp==='REVER Temperaturas'&&noOficina(i));
   else if(f==='bateria') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgVolt==='REVER Bateria'&&noOficina(i));
   else if(f==='oficina') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).obs==='Oficina');
   else if(f==='sinistro') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).obs==='Sinistro');
@@ -1488,10 +1502,10 @@ function applyLookups(l1, l2) {
     const mk=merged[mn]!==undefined?mn:(merged[pn]!==undefined?pn:null);
     const cur=(edits[i]?.obs!==undefined)?edits[i].obs:v.obs;
     if(mk){ const no=merged[mk]; if(cur!==no){edits[i]={...(edits[i]||{}),obs:no};} }
-    // Só limpa Oficina se o ficheiro 1 (diário) foi carregado e o veículo não está nele
-    else if(cur==='Oficina' && l1 && !l1[mn] && !l1[pn]){edits[i]={...(edits[i]||{}),obs:''};}
-    // Só limpa Sinistro se o ficheiro 2 (JSP/paragens longas) foi carregado e o veículo não está nele
-    else if(cur==='Sinistro' && l2 && !l2[mn] && !l2[pn]){edits[i]={...(edits[i]||{}),obs:''};}
+    // Ficheiro 1 (diário) é fonte de verdade — limpa Oficina e Sinistro não presentes
+    else if((cur==='Oficina'||cur==='Sinistro') && l1 && !l1[mn] && !l1[pn]){edits[i]={...(edits[i]||{}),obs:''};}
+    // Ficheiro 2 só limpa Sinistro se não houver ficheiro 1
+    else if(cur==='Sinistro' && !l1 && l2 && !l2[mn] && !l2[pn]){edits[i]={...(edits[i]||{}),obs:''};}
   });
 }
 
@@ -1509,10 +1523,10 @@ function applyOpFiles() {
     const mk=merged[mn]!==undefined?mn:(merged[pn]!==undefined?pn:null);
     const cur=(edits[i]?.obs!==undefined)?edits[i].obs:v.obs;
     if(mk){const no=merged[mk];if(!cur){edits[i]={...(edits[i]||{}),obs:no};added++;}else if(cur!==no){edits[i]={...(edits[i]||{}),obs:no};updated++;}else unchanged++;}
-    // Só limpa Oficina se o ficheiro 1 (diário) foi carregado e o veículo não está nele
-    else if(cur==='Oficina' && stagedLookups[0] && !stagedLookups[0][mn] && !stagedLookups[0][pn]){edits[i]={...(edits[i]||{}),obs:''};removed++;}
-    // Só limpa Sinistro se o ficheiro 2 (JSP/paragens longas) foi carregado e o veículo não está nele
-    else if(cur==='Sinistro' && stagedLookups[1] && !stagedLookups[1][mn] && !stagedLookups[1][pn]){edits[i]={...(edits[i]||{}),obs:''};removed++;}
+    // Ficheiro 1 (diário) é fonte de verdade — limpa Oficina e Sinistro não presentes
+    else if((cur==='Oficina'||cur==='Sinistro') && stagedLookups[0] && !stagedLookups[0][mn] && !stagedLookups[0][pn]){edits[i]={...(edits[i]||{}),obs:''};removed++;}
+    // Ficheiro 2 só limpa Sinistro se não houver ficheiro 1
+    else if(cur==='Sinistro' && !stagedLookups[0] && stagedLookups[1] && !stagedLookups[1][mn] && !stagedLookups[1][pn]){edits[i]={...(edits[i]||{}),obs:''};removed++;}
   });
   upBadge(); renderAll();
   ls(K_OFICINAS,{l1:stagedLookups[0],l2:stagedLookups[1]});
@@ -2245,8 +2259,8 @@ function exportListaFiltrada() {
   if(f==='todos_gps') idx=idx.filter(i=>!!getEff(ALL_VEHICLES[i],i).msgGPS&&noOficina(i));
   else if(f==='instalar') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgGPS==='Instalar GPS'&&noOficina(i));
   else if(f==='rever_gps') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgGPS==='REVER GPS'&&noOficina(i));
-  else if(f==='porta') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgPorta==='REVER S.Porta'&&noOficina(i));
-  else if(f==='temp') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgTemp==='REVER Temperaturas'&&noOficina(i));
+  else if(f==='porta') idx=idx.filter(i=>hasPorta(getEff(ALL_VEHICLES[i],i))&&getEff(ALL_VEHICLES[i],i).msgPorta==='REVER S.Porta'&&noOficina(i));
+  else if(f==='temp') idx=idx.filter(i=>hasTemp(getEff(ALL_VEHICLES[i],i))&&getEff(ALL_VEHICLES[i],i).msgTemp==='REVER Temperaturas'&&noOficina(i));
   else if(f==='bateria') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgVolt==='REVER Bateria'&&noOficina(i));
   else if(f==='oficina') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).obs==='Oficina');
   else if(f==='sinistro') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).obs==='Sinistro');
