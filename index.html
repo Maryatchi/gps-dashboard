@@ -184,6 +184,47 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .chg-row:last-child{border-bottom:none}.chg-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 @media(max-width:800px){.two-col,.chart-grid{grid-template-columns:1fr}.load-grid{grid-template-columns:1fr}.vrow{grid-template-columns:100px 80px 1fr 28px}.vrow>:nth-child(3),.vrow>:nth-child(4){display:none}}
 @media print{.topbar,.tab-bar,.region-bar,.filter-row,.btn-sm,.btn-green,.btn-amber,.btn-blue,.sinput,.modal-overlay,.op-panel,.chg-box{display:none!important}body{background:white;color:black}.card{border:1px solid #ddd}}
+
+/* ── VISTA CAMPO (mobile) ── */
+#page-campo{padding:.75rem;max-width:600px}
+.campo-search{width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;padding:10px 14px;outline:none;margin-bottom:.75rem}
+.campo-search:focus{border-color:var(--blue)}
+.campo-filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:.75rem}
+.cfilt{padding:7px 14px;border-radius:99px;border:1px solid var(--border2);background:transparent;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;white-space:nowrap}
+.cfilt:hover{border-color:var(--blue);color:var(--blue)}.cfilt.on{background:var(--blue);border-color:var(--blue);color:white}
+.campo-summary{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1rem}
+.csumm{background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);padding:8px 14px;font-size:12px;display:flex;flex-direction:column;align-items:center;flex:1;min-width:70px}
+.csumm-n{font-size:22px;font-weight:700;font-family:'DM Mono',monospace;line-height:1}
+.csumm-l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-top:3px}
+.campo-list{display:flex;flex-direction:column;gap:8px}
+.ccard{background:var(--surface);border:1px solid var(--border2);border-radius:var(--rl);padding:14px 16px;cursor:pointer;transition:background .12s;-webkit-tap-highlight-color:transparent;border-left:4px solid transparent}
+.ccard:active{background:var(--surface2)}
+.ccard.cl-red{border-left-color:#ef4444}
+.ccard.cl-amber{border-left-color:#f59e0b}
+.ccard.cl-teal{border-left-color:#14b8a6}
+.ccard.cl-gray{border-left-color:#374151}
+.ccard-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.ccard-plate{font-family:'DM Mono',monospace;font-size:16px;font-weight:600;letter-spacing:.02em}
+.ccard-lastseen{font-size:11px;text-align:right;line-height:1.3}
+.ccard-mid{display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap}
+.ccard-transp{font-size:12px;color:var(--muted)}
+.ccard-probs{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:4px}
+.ccard-notes{font-size:11px;color:#93c5fd;margin-top:4px;padding-top:6px;border-top:1px solid var(--border)}
+.campo-empty{text-align:center;color:var(--muted);font-size:14px;padding:3rem 1rem}
+.campo-mobile-bar{display:none;align-items:center;justify-content:space-between;padding:.75rem .75rem .5rem;gap:8px;position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--border);margin:-0.75rem -.75rem .75rem}
+.campo-mobile-bar .cmb-brand{display:flex;align-items:center;gap:8px}
+.campo-mobile-bar .cmb-week{font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);background:var(--surface2);border:1px solid var(--border2);padding:3px 8px;border-radius:99px}
+.campo-mobile-bar .cmb-actions{display:flex;gap:6px}
+.cmb-btn{background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--muted);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;padding:7px 12px;cursor:pointer;white-space:nowrap;-webkit-tap-highlight-color:transparent}
+.cmb-btn.cmb-sync{border-color:rgba(59,130,246,.3);color:#93c5fd;background:var(--blue-dim)}
+.cmb-btn.cmb-save{border-color:rgba(34,197,94,.3);color:#86efac;background:var(--green-dim)}
+.campo-count{font-size:11px;color:var(--muted);margin-bottom:.75rem;font-family:'DM Mono',monospace}
+@media(max-width:600px){
+  .tab-bar{display:none}
+  .topbar{display:none}
+  #page-campo{padding:.75rem}
+  .campo-mobile-bar{display:flex !important}
+}
 </style>
 </head>
 <body>
@@ -389,6 +430,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     <button class="tab-btn" onclick="switchTab('trend',this)">📈 Tendência</button>
     <button class="tab-btn" onclick="switchTab('registos',this)">📋 Registos</button>
     <button class="tab-btn" onclick="switchTab('plano',this)">🗓️ Planeamento</button>
+    <button class="tab-btn" onclick="switchTab('campo',this)">📱 Campo</button>
     <button class="tab-btn" onclick="switchTab('gerar',this)">⚙️ Gerar Base JSON</button>
   </div>
 
@@ -569,6 +611,33 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       </div>
       <div id="plano-board" style="display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;align-items:start"></div>
     </div>
+  </div>
+
+  <!-- CAMPO (vista mobile) -->
+  <div class="tab-page" id="page-campo">
+    <!-- barra mobile: só visível em ecrã pequeno via CSS -->
+    <div class="campo-mobile-bar">
+      <div class="cmb-brand">
+        <span style="font-size:14px;font-weight:700;letter-spacing:-.3px">GPS Dashboard</span>
+        <span class="cmb-week" id="cmb-week-badge">—</span>
+      </div>
+      <div class="cmb-actions">
+        <button class="cmb-btn cmb-sync" onclick="forceSyncFromCloud()">🔄 Sync</button>
+        <button class="cmb-btn cmb-save" onclick="saveWeek()">💾 Guardar</button>
+      </div>
+    </div>
+    <input class="campo-search" id="campo-search" type="text" placeholder="🔍  Pesquisar matrícula..." oninput="renderCampo()">
+    <div class="campo-filters">
+      <button class="cfilt on" onclick="setCampoFilt(this,'problemas')">⚠️ Problemas</button>
+      <button class="cfilt" onclick="setCampoFilt(this,'gps')">📡 GPS</button>
+      <button class="cfilt" onclick="setCampoFilt(this,'porta')">🚪 Porta</button>
+      <button class="cfilt" onclick="setCampoFilt(this,'temp')">🌡️ Temp</button>
+      <button class="cfilt" onclick="setCampoFilt(this,'oficina')">🔧 Oficina</button>
+      <button class="cfilt" onclick="setCampoFilt(this,'todos')">Todas</button>
+    </div>
+    <div class="campo-summary" id="campo-summary"></div>
+    <div class="campo-count" id="campo-count"></div>
+    <div class="campo-list" id="campo-list"></div>
   </div>
 
   <!-- GERAR BASE JSON -->
@@ -1233,7 +1302,7 @@ function migrateGaleraFromNotes() {
 function openDashboard() {
   document.getElementById('loader').style.display = 'none';
   document.getElementById('dashboard').style.display = 'block';
-  document.getElementById('week-badge').textContent = meta.week;
+  document.getElementById('week-badge').textContent = meta.week; const cmb=document.getElementById('cmb-week-badge'); if(cmb) cmb.textContent=meta.week;
   edits = ls(K_EDITS) || edits;
   migrateGaleraFromNotes();
   upBadge();
@@ -1271,8 +1340,8 @@ function upBadge() {
 
 function setRegion(btn,r) { currentRegion=r; document.querySelectorAll('.rfilt').forEach(b=>b.classList.remove('on')); btn.classList.add('on'); renderAll(); }
 function setVFilt(btn,f)  { currentVFilt=f;  document.querySelectorAll('.vfilt').forEach(b=>b.classList.remove('on')); btn.classList.add('on'); renderVehicles(); }
-function switchTab(id,btn) { document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); document.querySelectorAll('.tab-page').forEach(p=>p.classList.remove('active')); btn.classList.add('active'); document.getElementById('page-'+id).classList.add('active'); if(id==='trend')renderTrend(); }
-function renderAll() { renderKPIs(); renderSysBars(); renderFleetActions(); renderTransporters(); renderVehicles(); }
+function switchTab(id,btn) { document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); document.querySelectorAll('.tab-page').forEach(p=>p.classList.remove('active')); btn.classList.add('active'); document.getElementById('page-'+id).classList.add('active'); if(id==='trend')renderTrend(); if(id==='campo')renderCampo(); }
+function renderAll() { renderKPIs(); renderSysBars(); renderFleetActions(); renderTransporters(); renderVehicles(); if(document.getElementById('page-campo')?.classList.contains('active'))renderCampo(); }
 
 // ── RENDERS ───────────────────────────────────────────────────────────────────
 function renderKPIs() {
@@ -2240,7 +2309,7 @@ function generateBaseJSON() {
   // Update meta
   const today = new Date().toLocaleDateString('pt-PT');
   meta = { week: `Sem ${weekNum} · ${year}`, date: today, weekNum, year };
-  document.getElementById('week-badge').textContent = meta.week;
+  document.getElementById('week-badge').textContent = meta.week; const cmb=document.getElementById('cmb-week-badge'); if(cmb) cmb.textContent=meta.week;
   ls(K_VEHICLES, ALL_VEHICLES);
   ls(K_META, meta);
   upBadge(); renderAll();
@@ -2660,6 +2729,108 @@ switchTab = function(id, btn) {
   if (id==='registos') renderRegistos();
 };
 
+// ── VISTA CAMPO (mobile) ──────────────────────────────────────────────────────
+let campoFilt = 'problemas';
+function setCampoFilt(btn, f) {
+  campoFilt = f;
+  document.querySelectorAll('.cfilt').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  renderCampo();
+}
+
+function renderCampo() {
+  const search = (document.getElementById('campo-search')?.value || '').toLowerCase().trim();
+  const all = ALL_VEHICLES.map((v, i) => ({ ...getEff(v, i), _i: i }))
+    .filter(v => v.obs !== 'Removida');
+
+  // summary sempre sobre todos os problemas (sem filtro de search)
+  const allProb = all.filter(v => !['Oficina','Sinistro'].includes(v.obs));
+  const nGPS  = allProb.filter(v => v.msgGPS).length;
+  const nPorta= allProb.filter(v => hasPorta(v) && v.msgPorta === 'REVER S.Porta').length;
+  const nTemp = allProb.filter(v => hasTemp(v)  && v.msgTemp  === 'REVER Temperaturas').length;
+  const nOfic = all.filter(v => v.obs === 'Oficina').length;
+  document.getElementById('campo-summary').innerHTML =
+    `<div class="csumm"><div class="csumm-n c-red">${nGPS}</div><div class="csumm-l">GPS</div></div>`+
+    `<div class="csumm"><div class="csumm-n c-amber">${nPorta}</div><div class="csumm-l">Porta</div></div>`+
+    `<div class="csumm"><div class="csumm-n" style="color:#14b8a6">${nTemp}</div><div class="csumm-l">Temp</div></div>`+
+    `<div class="csumm"><div class="csumm-n c-blue">${nOfic}</div><div class="csumm-l">Oficina</div></div>`;
+
+  // aplicar filtro principal
+  let vs = all;
+  if (campoFilt === 'problemas') vs = vs.filter(v => (v.msgGPS || (hasPorta(v) && v.msgPorta === 'REVER S.Porta') || (hasTemp(v) && v.msgTemp === 'REVER Temperaturas')) && !['Oficina','Sinistro'].includes(v.obs));
+  else if (campoFilt === 'gps')    vs = vs.filter(v => v.msgGPS && !['Oficina','Sinistro'].includes(v.obs));
+  else if (campoFilt === 'porta')  vs = vs.filter(v => hasPorta(v) && v.msgPorta === 'REVER S.Porta' && !['Oficina','Sinistro'].includes(v.obs));
+  else if (campoFilt === 'temp')   vs = vs.filter(v => hasTemp(v) && v.msgTemp === 'REVER Temperaturas' && !['Oficina','Sinistro'].includes(v.obs));
+  else if (campoFilt === 'oficina')vs = vs.filter(v => v.obs === 'Oficina' || v.obs === 'Sinistro');
+
+  // filtro de pesquisa
+  if (search) vs = vs.filter(v => (v.plate || v.mat || '').toLowerCase().includes(search) || (v.transp || '').toLowerCase().includes(search));
+
+  // ordenar: Instalar GPS primeiro, depois REVER GPS, depois porta/temp
+  vs.sort((a, b) => {
+    const rank = v => v.msgGPS === 'Instalar GPS' ? 0 : v.msgGPS === 'REVER GPS' ? 1 : v.msgPorta ? 2 : 3;
+    return rank(a) - rank(b);
+  });
+
+  document.getElementById('campo-count').textContent = `${vs.length} viatura${vs.length !== 1 ? 's' : ''}`;
+
+  if (!vs.length) {
+    document.getElementById('campo-list').innerHTML = `<div class="campo-empty">✅ Nenhuma viatura com problemas<br><span style="font-size:12px;color:var(--hint)">neste filtro</span></div>`;
+    return;
+  }
+
+  document.getElementById('campo-list').innerHTML = vs.map(v => {
+    // cor da barra lateral
+    const cl = v.obs==='Oficina'||v.obs==='Sinistro' ? 'cl-gray'
+      : v.msgGPS==='Instalar GPS' ? 'cl-red'
+      : v.msgGPS==='REVER GPS'    ? 'cl-amber'
+      : v.msgPorta || v.msgTemp   ? 'cl-amber'
+      : 'cl-teal';
+
+    // último sinal
+    let lastHtml = '';
+    if (v.msgGPS === 'Instalar GPS') {
+      lastHtml = `<span style="color:#ef4444;font-size:11px;font-weight:600">Sem GPS</span>`;
+    } else if (v.daysAgo !== undefined && v.daysAgo !== 9999) {
+      const d = v.daysAgo;
+      const col = d > 30 ? '#ef4444' : d > 7 ? '#f59e0b' : d > 1 ? '#fcd34d' : '#22c55e';
+      const lbl = d === 0 ? 'Hoje' : d === 1 ? 'Ontem' : `${d}d atrás`;
+      lastHtml = `<span style="color:${col};font-size:12px;font-weight:600">${lbl}</span><br><span style="font-size:10px;color:var(--muted)">${(v.lastSeen||'').split(' ')[0]}</span>`;
+    }
+
+    // pills de problema
+    const probs = [];
+    if (v.msgGPS) probs.push(`<span class="pill ${v.msgGPS==='Instalar GPS'?'p-red':'p-amber'}" style="font-size:11px">${v.msgGPS}</span>`);
+    if (hasPorta(v) && v.msgPorta) probs.push(`<span class="pill p-amber" style="font-size:11px">${v.msgPorta}</span>`);
+    if (hasTemp(v)  && v.msgTemp)  probs.push(`<span class="pill" style="background:rgba(20,184,166,.12);color:#5eead4;border:1px solid rgba(20,184,166,.25);font-size:11px">${v.msgTemp}</span>`);
+    if (v.obs === 'Oficina')  probs.push(`<span class="pill p-gray" style="font-size:11px">🔧 Oficina</span>`);
+    if (v.obs === 'Sinistro') probs.push(`<span class="pill p-red" style="font-size:11px">⚠️ Sinistro</span>`);
+    if (v.obs === 'Aguardar') probs.push(`<span class="pill p-amber" style="font-size:11px">⏳ Aguardar</span>`);
+
+    // tipologia badge
+    const tipoBadge = v.tipo && !['Galera','Tractor',''].includes(v.tipo)
+      ? `<span class="pill" style="background:rgba(99,102,241,.12);color:#a5b4fc;border:1px solid rgba(99,102,241,.25);font-size:11px">${v.tipo==='Frio'?'🧊':v.tipo==='Iso'?'❄️':'🏕️'} ${v.tipo}</span>`
+      : '';
+
+    const notesHtml = v.notes ? `<div class="ccard-notes">📝 ${v.notes}</div>` : '';
+    const rebHtml = v.reboque ? `<span style="font-size:11px;color:#fcd34d;font-family:'DM Mono',monospace">🔗 ${v.reboque}</span>` : '';
+
+    return `<div class="ccard ${cl}" onclick="openEdit(${v._i})">
+      <div class="ccard-top">
+        <span class="ccard-plate">${v.plate || v.mat}</span>
+        <div class="ccard-lastseen">${lastHtml}</div>
+      </div>
+      <div class="ccard-mid">
+        <span class="ccard-transp">${v.transp}</span>
+        ${tipoBadge}
+        ${rebHtml}
+      </div>
+      <div class="ccard-probs">${probs.join('')}</div>
+      ${notesHtml}
+    </div>`;
+  }).join('');
+}
+
 // ── FEATURE 3: PLANEAMENTO ────────────────────────────────────────────────────
 const K_PLANO = 'fleet_plano_v2';
 const PLANO_COLS = [
@@ -2870,6 +3041,11 @@ switchTab = function(id, btn) {
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
+// Auto-activar tab Campo em ecrãs pequenos
+if (window.innerWidth <= 600) {
+  const campoBtn = document.querySelector('.tab-btn[onclick*="campo"]');
+  if (campoBtn) { document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); document.querySelectorAll('.tab-page').forEach(p=>p.classList.remove('active')); campoBtn.classList.add('active'); document.getElementById('page-campo')?.classList.add('active'); }
+}
 
 checkPrevSession();// ── EMPRESA FILE MODE ─────────────────────────────────────────────────────────
 let empRawData = [null, null]; // up to 2 files
@@ -3074,7 +3250,7 @@ async function applyEmpresaFile() {
   ls(K_META, meta);
   ls(K_EDITS, {});
 
-  document.getElementById('week-badge').textContent = meta.week;
+  document.getElementById('week-badge').textContent = meta.week; const cmb=document.getElementById('cmb-week-badge'); if(cmb) cmb.textContent=meta.week;
   upBadge(); renderAll();
 
   // Show result
