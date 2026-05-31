@@ -266,7 +266,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   <div class="load-grid">
     <!-- BASE JSON -->
     <div class="load-card" id="lc1">
-      <div class="lc-tag tag-req">Obrigatório</div>
+      <div class="lc-tag tag-opt" id="lc1-tag">Opcional</div>
       <div class="lc-header">
         <div class="lc-icon" style="background:var(--blue-dim)">📊</div>
         <div><div class="lc-title">Base JSON · Import Data</div><div class="lc-sub">Relatório semanal de performance</div></div>
@@ -419,6 +419,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <button class="btn-sm" onclick="toggleUpdPanel()">📥 Atualizações</button>
       <button class="btn-green" onclick="exportRelatorioTransportador()">📤 Relatório</button>
       <button class="btn-sm" onclick="forceSyncFromCloud()">🔄 Sincronizar</button>
+      <button class="btn-green" onclick="openAddVehicleModal()">➕ Viatura</button>
       <button class="btn-sm" onclick="goToLoader()">📂 Novos ficheiros</button>
       <button class="btn-sm" onclick="window.print()">🖨 Imprimir</button>
       <button class="btn-green" onclick="exportExcel()">📊 Excel</button>
@@ -734,6 +735,69 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 </div>
 
 <!-- EDIT MODAL -->
+<!-- MODAL NOVA VIATURA -->
+<div class="modal-overlay" id="add-vehicle-modal" onclick="if(event.target===this)closeAddVehicleModal()">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:420px">
+    <div class="modal-header">
+      <div><div class="modal-title">➕ Nova Viatura</div><div class="modal-plate">Adicionar à frota manualmente</div></div>
+      <button class="modal-close" onclick="closeAddVehicleModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem">
+        <div>
+          <div class="edit-label" style="margin-bottom:6px">Matrícula *</div>
+          <input id="av-mat" type="text" placeholder="00-AA-00" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'DM Mono',monospace;font-size:13px;font-weight:600;padding:9px 12px;outline:none;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
+        </div>
+        <div>
+          <div class="edit-label" style="margin-bottom:6px">Placa (licensePlate)</div>
+          <input id="av-plate" type="text" placeholder="AA-0000-A" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'DM Mono',monospace;font-size:13px;padding:9px 12px;outline:none;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
+        </div>
+      </div>
+      <div style="margin-bottom:.75rem">
+        <div class="edit-label" style="margin-bottom:6px">Transportador *</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap" id="av-transp-btns">
+          <button class="eopt av-transp-opt" data-val="ZAS" onclick="avSelTransp(this)">ZAS</button>
+          <button class="eopt av-transp-opt" data-val="TJA" onclick="avSelTransp(this)">TJA</button>
+          <button class="eopt av-transp-opt" data-val="TFS" onclick="avSelTransp(this)">TFS</button>
+          <button class="eopt av-transp-opt" data-val="JMR.ZAS" onclick="avSelTransp(this)">JMR.ZAS</button>
+          <button class="eopt av-transp-opt" data-val="JMR.TJA" onclick="avSelTransp(this)">JMR.TJA</button>
+        </div>
+        <input id="av-transp" type="text" placeholder="ou escreve aqui..." style="width:100%;margin-top:8px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:8px 12px;outline:none">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem">
+        <div>
+          <div class="edit-label" style="margin-bottom:6px">Tipo</div>
+          <select id="av-tipo" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:9px 12px;outline:none;cursor:pointer">
+            <option value="Galera">Galera</option>
+            <option value="Tractor">Tractor</option>
+          </select>
+        </div>
+        <div>
+          <div class="edit-label" style="margin-bottom:6px">Região</div>
+          <select id="av-regiao" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:9px 12px;outline:none;cursor:pointer">
+            <option value="Norte">Norte</option>
+            <option value="PDTN">PDTN</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <div class="edit-label" style="margin-bottom:6px">Tipologia</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="eopt av-galera-opt sel-none" data-val="" onclick="avSelGalera(this)">Nenhuma</button>
+          <button class="eopt av-galera-opt" data-val="Frio" onclick="avSelGalera(this)">🧊 Frio</button>
+          <button class="eopt av-galera-opt" data-val="Iso" onclick="avSelGalera(this)">❄️ Iso</button>
+          <button class="eopt av-galera-opt" data-val="Lona" onclick="avSelGalera(this)">🏕️ Lona</button>
+        </div>
+        <input id="av-galera" type="hidden" value="">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeAddVehicleModal()">Cancelar</button>
+      <button class="btn-save" onclick="saveAddVehicle()">➕ Adicionar</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-header">
@@ -858,6 +922,7 @@ async function forceSyncFromCloud() {
   const ok = await loadFromSupabase();
   if (ok) {
     ALL_VEHICLES = ls(K_VEHICLES) || ALL_VEHICLES;
+    mergeExtras();
     edits = ls(K_EDITS) || {};
     meta = ls(K_META) || meta;
     const wb = document.getElementById('week-badge');
@@ -878,6 +943,7 @@ async function saveWeekToSupabase(wn, yr) {
     showSync('Sem '+wn+' guardada!', '#22c55e');
     await syncToSupabase(K_VEHICLES, ALL_VEHICLES);
     await syncToSupabase(K_META, {week:'Sem '+wn+' · '+yr,date:today,weekNum:wn,year:yr});
+    await syncToSupabase(K_EXTRAS, getExtras());
     setTimeout(function() { if(btn){btn.textContent=orig;btn.style.background='';btn.disabled=false;} }, 3000);
   } catch(err) {
     console.error(err); if(btn){btn.textContent=orig;btn.disabled=false;}
@@ -891,7 +957,7 @@ const K_EDITS     = 'fleet_edits_v2';
 const K_META      = 'fleet_meta_v2';
 const K_HISTORY   = 'fleet_history_v2';
 const K_OFICINAS  = 'fleet_oficinas_v2'; // staged oficina lookups
-const K_MIGR_GALERA = 'fleet_migr_galera_v2'; // migração única: notas → tipologia
+const K_EXTRAS    = 'fleet_extras_v1';    // viaturas adicionadas manualmente
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
 let ALL_VEHICLES = [];
@@ -918,19 +984,58 @@ function saveEdits() {
   showSync('Guardado');
 }
 
-function checkPrevSession() {
-  const savedMeta  = ls(K_META);
+async function checkPrevSession() {
+  const savedMeta     = ls(K_META);
   const savedVehicles = ls(K_VEHICLES);
+
   if (savedMeta && savedVehicles && savedVehicles.length > 0) {
+    // Dados em localStorage — mostrar botão de retomar
     document.getElementById('prev-session').style.display = 'block';
     document.getElementById('prev-info').textContent = `Semana ${savedMeta.week} · ${savedMeta.date} · ${savedVehicles.length} veículos`;
     document.getElementById('prev-sub').textContent = `${Object.keys(ls(K_EDITS)||{}).length} edições guardadas`;
     document.getElementById('btn-resume').style.display = 'inline-block';
+  } else {
+    // Sem dados locais — tentar carregar do Supabase automaticamente
+    showLoaderStatus('☁️ A procurar dados na cloud...', '#93c5fd');
+    try {
+      const ok = await loadFromSupabase();
+      const vAfter = ls(K_VEHICLES);
+      const mAfter = ls(K_META);
+      if (ok && vAfter && vAfter.length > 0) {
+        // Dados encontrados — entrar direto no dashboard
+        showLoaderStatus('✅ Dados carregados da cloud', '#22c55e');
+        ALL_VEHICLES = vAfter;
+        mergeExtras();
+        edits = ls(K_EDITS) || {};
+        meta  = mAfter || meta;
+        setTimeout(() => openDashboard(), 800);
+        return;
+      } else {
+        showLoaderStatus('Sem dados na cloud. Carrega o ficheiro Base JSON.', '#6b7280');
+      }
+    } catch(e) {
+      showLoaderStatus('Sem ligação à cloud. Carrega o ficheiro Base JSON.', '#6b7280');
+    }
   }
+}
+
+function showLoaderStatus(msg, color) {
+  let el = document.getElementById('loader-cloud-status');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'loader-cloud-status';
+    el.style.cssText = 'font-size:12px;font-family:DM Mono,monospace;padding:8px 14px;border-radius:var(--r);background:var(--surface2);border:1px solid var(--border2);max-width:780px;width:100%;text-align:center;transition:color .3s';
+    // Inserir antes do load-grid
+    const grid = document.querySelector('.load-grid');
+    if (grid) grid.parentNode.insertBefore(el, grid);
+  }
+  el.style.color = color;
+  el.textContent = msg;
 }
 
 function resumeSession() {
   ALL_VEHICLES = ls(K_VEHICLES) || [];
+  mergeExtras();
   edits = ls(K_EDITS) || {};
   meta  = ls(K_META)  || meta;
   if (!ALL_VEHICLES.length) { alert('Sessão inválida.'); return; }
@@ -1112,6 +1217,7 @@ function loadBase(file) {
       const dt = new Date().toLocaleDateString('pt-PT');
       meta = { week: `Sem ${wn} · ${yr}`, date: dt, weekNum: wn, year: yr };
 
+      mergeExtras();
       setDzDone('dz-base', 'dz-base-name', file.name, `${ALL_VEHICLES.length} veículos`);
       document.getElementById('lc1').classList.add('loaded');
       checkStartReady();
@@ -1270,7 +1376,6 @@ function startDashboard() {
 }
 
 function migrateGaleraFromNotes() {
-  if (ls(K_MIGR_GALERA)) return; // já correu — não repetir
   let count = 0;
   ALL_VEHICLES.forEach((v, i) => {
     const e = edits[i] || {};
@@ -1296,7 +1401,6 @@ function migrateGaleraFromNotes() {
     count++;
   });
   if (count > 0) { saveEdits(); console.log(`[migração] ${count} viaturas: tipologia extraída das notas`); }
-  ls(K_MIGR_GALERA, true); // marcar como concluída
 }
 
 function openDashboard() {
@@ -1967,6 +2071,23 @@ function applyNotasData(rows, fname, stElId, resultElId, errElId) {
         });
       }
     } else {
+      // Matrícula nova — adicionar como extra com alerta para configurar
+      const newV = {
+        mat: mat, plate: mat, tipo: 'Galera', transp: '?', regiao: 'Norte',
+        obs:'', msgGPS:'Instalar GPS', msgPorta:'', msgTemp:'', msgVolt:'',
+        status:'', gpsOK:false, portaOK:false, tempOK:false, tacoOK:false,
+        canbusOK:false, voltOK:false, notes: note, _extra:true, _needsCfg:true
+      };
+      const extras = getExtras();
+      const mn2 = norm(mat);
+      if (!extras.some(e2 => norm(e2.mat) === mn2)) {
+        extras.push(newV);
+        saveExtras(extras);
+        ALL_VEHICLES.push(newV);
+        const newIdx = ALL_VEHICLES.length - 1;
+        edits[newIdx] = { gps: 'Instalar GPS', notes: note };
+        saveEdits();
+      }
       notFound++;
     }
   });
@@ -1985,7 +2106,9 @@ function applyNotasData(rows, fname, stElId, resultElId, errElId) {
     st.style.display = 'flex';
   }
 
-  resEl.innerHTML = `✅ <strong>${fname}</strong><br>📝 Notas aplicadas: <strong>${updated}</strong><br>${notFound > 0 ? `⚠️ Não encontradas: <strong>${notFound}</strong>` : ''}`;
+  const newExtras = ALL_VEHICLES.filter(v => v._needsCfg);
+  resEl.innerHTML = `✅ <strong>${fname}</strong><br>📝 Notas aplicadas: <strong>${updated}</strong>${newExtras.length > 0 ? `<br><span style="color:#fcd34d">🆕 ${newExtras.length} viatura${newExtras.length>1?'s':''} nova${newExtras.length>1?'s':''} adicionada${newExtras.length>1?'s':''} — configura transportador e tipologia</span>` : ''}${notFound > newExtras.length ? `<br>⚠️ ${notFound - newExtras.length} não encontradas` : ''}`;
+  if (newExtras.length > 0) showNewVehiclesAlert(newExtras);
   resEl.style.display = 'block';
 }
 
@@ -2728,6 +2851,113 @@ switchTab = function(id, btn) {
   _regSwitchTab(id, btn);
   if (id==='registos') renderRegistos();
 };
+
+
+// ── VIATURAS EXTRAS (adicionadas manualmente) ─────────────────────────────────
+function getExtras() { return ls(K_EXTRAS) || []; }
+function saveExtras(arr) { ls(K_EXTRAS, arr); syncToSupabase(K_EXTRAS, arr); }
+
+function mergeExtras() {
+  const extras = getExtras();
+  if (!extras.length) return;
+  const existing = new Set(ALL_VEHICLES.map(v => norm(v.mat)));
+  const toAdd = extras.filter(v => !existing.has(norm(v.mat)));
+  ALL_VEHICLES = [...ALL_VEHICLES, ...toAdd];
+}
+
+function addExtraVehicle(mat, plate, tipo, transp, regiao, galera) {
+  const extras = getExtras();
+  const mn = norm(mat);
+  if (ALL_VEHICLES.some(v => norm(v.mat) === mn)) {
+    alert('Esta matrícula já existe na frota.');
+    return false;
+  }
+  const v = {
+    mat, plate: plate||mat, tipo: tipo||'Galera', transp: transp||'',
+    regiao: regiao||'Norte', obs:'', msgGPS:'Instalar GPS', msgPorta:'',
+    msgTemp:'', msgVolt:'', status:'', gpsOK:false, portaOK:false,
+    tempOK:false, tacoOK:false, canbusOK:false, voltOK:false,
+    notes:'', _extra:true
+  };
+  extras.push(v);
+  saveExtras(extras);
+  ALL_VEHICLES.push(v);
+  // Definir tipologia imediatamente via edits
+  const idx = ALL_VEHICLES.length - 1;
+  edits[idx] = { ...(edits[idx]||{}), galera: galera||'', gps: 'Instalar GPS' };
+  saveEdits();
+  renderAll();
+  showSync('Viatura adicionada');
+  return true;
+}
+
+
+function showNewVehiclesAlert(newVehicles) {
+  // Remove alerta anterior se existir
+  document.getElementById('new-vehicles-alert')?.remove();
+  const el = document.createElement('div');
+  el.id = 'new-vehicles-alert';
+  el.style.cssText = 'position:fixed;bottom:1.5rem;right:1.5rem;z-index:200;background:#1a1e25;border:1px solid rgba(245,158,11,.5);border-radius:var(--rl);padding:1rem 1.25rem;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,.5);animation:slideUp .2s ease';
+  el.innerHTML = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:.75rem">
+      <div>
+        <div style="font-size:13px;font-weight:600;color:#fcd34d">🆕 ${newVehicles.length} viatura${newVehicles.length>1?'s':''}  nova${newVehicles.length>1?'s':''} detetada${newVehicles.length>1?'s':''}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px">Configura transportador e tipologia</div>
+      </div>
+      <button onclick="document.getElementById('new-vehicles-alert').remove()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;line-height:1;padding:0">×</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;max-height:180px;overflow-y:auto">
+      ${newVehicles.map(v => {
+        const idx = ALL_VEHICLES.findIndex(x => norm(x.mat) === norm(v.mat));
+        return `<button onclick="openEdit(${idx});document.getElementById('new-vehicles-alert').remove()" style="background:var(--surface3);border:1px solid rgba(245,158,11,.3);border-radius:var(--r);color:#fcd34d;font-family:'DM Mono',monospace;font-size:12px;font-weight:600;padding:7px 12px;cursor:pointer;text-align:left;transition:background .12s" onmouseover="this.style.background='rgba(245,158,11,.1)'" onmouseout="this.style.background='var(--surface3)'">${v.plate||v.mat} <span style="color:var(--muted);font-weight:400;font-family:'DM Sans',sans-serif">→ configurar</span></button>`;
+      }).join('')}
+    </div>
+  `;
+  document.body.appendChild(el);
+  // Auto-fechar após 30s
+  setTimeout(() => el.remove(), 30000);
+}
+
+
+function avSelTransp(btn) {
+  document.querySelectorAll('.av-transp-opt').forEach(b => b.className = 'eopt av-transp-opt');
+  btn.classList.add('sel-amber');
+  document.getElementById('av-transp').value = btn.dataset.val;
+}
+function avSelGalera(btn) {
+  document.querySelectorAll('.av-galera-opt').forEach(b => b.className = 'eopt av-galera-opt');
+  const val = btn.dataset.val;
+  btn.classList.add(val ? 'sel-blue' : 'sel-none');
+  document.getElementById('av-galera').value = val;
+}
+
+function openAddVehicleModal() {
+  document.getElementById('add-vehicle-modal').classList.add('open');
+  document.getElementById('av-mat').value = '';
+  document.getElementById('av-plate').value = '';
+  document.getElementById('av-tipo').value = 'Galera';
+  document.getElementById('av-transp').value = '';
+  document.getElementById('av-regiao').value = 'Norte';
+  document.getElementById('av-galera').value = '';
+  document.getElementById('av-mat').focus();
+}
+function closeAddVehicleModal() {
+  document.getElementById('add-vehicle-modal').classList.remove('open');
+}
+function saveAddVehicle() {
+  const mat    = document.getElementById('av-mat').value.trim().toUpperCase();
+  const plate  = document.getElementById('av-plate').value.trim().toUpperCase();
+  const tipo   = document.getElementById('av-tipo').value;
+  const transp = document.getElementById('av-transp').value.trim();
+  const regiao = document.getElementById('av-regiao').value;
+  const galera = document.getElementById('av-galera').value;
+  if (!mat) { alert('Matrícula obrigatória.'); return; }
+  if (!transp) { alert('Transportador obrigatório.'); return; }
+  if (addExtraVehicle(mat, plate, tipo, transp, regiao, galera)) {
+    closeAddVehicleModal();
+  }
+}
+
 
 // ── VISTA CAMPO (mobile) ──────────────────────────────────────────────────────
 let campoFilt = 'problemas';
