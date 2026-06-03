@@ -2271,12 +2271,44 @@ async function recoverHistoryFromSupabase() {
 function mkChart(id,nData,pData,labels) {
   const ctx=document.getElementById(id);
   if(!ctx) return null;
-  const obj={label:'Objetivo',data:labels.map(()=>98),borderColor:'rgba(255,255,255,0.25)',borderDash:[5,4],borderWidth:1.5,pointRadius:0,fill:false};
+  // Eixo Y dinâmico: zoom na zona dos dados, teto sempre 100%
+  const vals = nData.concat(pData).filter(v => typeof v === 'number' && !isNaN(v));
+  let yMin = 0;
+  if (vals.length) {
+    const lo = Math.min.apply(null, vals);
+    // Arredonda para baixo até ao múltiplo de 5 abaixo do mínimo, com margem de 5
+    yMin = Math.max(0, Math.floor((lo - 5) / 5) * 5);
+    if (yMin > 95) yMin = 95; // garante que há sempre alguma altura visível
+  }
+  const obj={label:'Objetivo',data:labels.map(()=>98),borderColor:'rgba(255,255,255,0.25)',borderDash:[5,4],borderWidth:1.5,pointRadius:0,fill:false,tension:0};
   return new Chart(ctx,{type:'line',data:{labels,datasets:[
-    {label:'Norte',data:nData,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.07)',borderWidth:2,pointRadius:3,pointBackgroundColor:'#3b82f6',tension:.2,fill:false},
-    {label:'PDTN', data:pData,borderColor:'#22c55e',backgroundColor:'rgba(34,197,94,0.07)', borderWidth:2,pointRadius:3,pointBackgroundColor:'#22c55e',tension:.2,fill:false},
+    {label:'Norte',data:nData,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.07)',borderWidth:2,pointRadius:3,pointBackgroundColor:'#3b82f6',tension:0,fill:false,spanGaps:true},
+    {label:'PDTN', data:pData,borderColor:'#22c55e',backgroundColor:'rgba(34,197,94,0.07)', borderWidth:2,pointRadius:3,pointBackgroundColor:'#22c55e',tension:0,fill:false,spanGaps:true},
     obj
-  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#9ca3af',font:{size:11},boxWidth:12}}},scales:{y:{min:0,max:105,ticks:{callback:v=>v+'%',color:'#6b7280',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}},x:{ticks:{color:'#6b7280',font:{size:10},maxRotation:45},grid:{display:false}}}}});
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#9ca3af',font:{size:11},boxWidth:12}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+c.parsed.y+'%'}}},scales:{y:{min:yMin,max:100,ticks:{callback:v=>v+'%',color:'#6b7280',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}},x:{ticks:{color:'#6b7280',font:{size:10},maxRotation:45},grid:{display:false}}}}});
+}
+
+// Preenche semanas em falta entre a primeira e a última, para o eixo X ser uma linha temporal contínua.
+// Semanas sem dados ficam com norte/pdtn = null (a linha salta o buraco via spanGaps).
+function buildContinuousWeeks(data) {
+  if (!data.length) return [];
+  if (data.length === 1) return data.slice();
+  const out = [];
+  const idxByKey = {};
+  data.forEach(e => { idxByKey[e.year + '-' + e.week] = e; });
+  let cur = { year: data[0].year, week: data[0].week };
+  const last = { year: data[data.length-1].year, week: data[data.length-1].week };
+  let guard = 0;
+  while (guard++ < 300) {
+    const key = cur.year + '-' + cur.week;
+    if (idxByKey[key]) out.push(idxByKey[key]);
+    else out.push({ week: cur.week, year: cur.year, norte: null, pdtn: null });
+    if (cur.year === last.year && cur.week === last.week) break;
+    // avançar uma semana (até 53, depois muda de ano)
+    cur.week++;
+    if (cur.week > 53) { cur.week = 1; cur.year++; }
+  }
+  return out;
 }
 
 function renderTrend() {
@@ -2284,12 +2316,14 @@ function renderTrend() {
   const cur={week:meta.weekNum,year:meta.year,date:meta.date,norte:getRegionStats('Norte'),pdtn:getRegionStats('PDTN')};
   const alreadySaved=data.some(e=>e.week===cur.week&&e.year===cur.year);
   if(!alreadySaved){data=[...data,cur].sort((a,b)=>a.year!==b.year?a.year-b.year:a.week-b.week);}
-  const labels=data.map(e=>`Sem ${e.week}`);
+  // Construir eixo X contínuo: preencher semanas em falta entre a primeira e a última (null nos buracos)
+  const serie = buildContinuousWeeks(data);
+  const labels = serie.map(e => `Sem ${e.week}`);
   if(chartGPS)chartGPS.destroy(); if(chartPorta)chartPorta.destroy(); if(chartTemp)chartTemp.destroy(); if(chartVolt)chartVolt.destroy();
-  chartGPS   =mkChart('chart-gps',  data.map(e=>e.norte.gps),  data.map(e=>e.pdtn.gps),  labels);
-  chartPorta =mkChart('chart-porta',data.map(e=>e.norte.porta),data.map(e=>e.pdtn.porta),labels);
-  chartTemp  =mkChart('chart-temp', data.map(e=>e.norte.temp), data.map(e=>e.pdtn.temp), labels);
-  chartVolt  =mkChart('chart-volt', data.map(e=>e.norte.volt), data.map(e=>e.pdtn.volt), labels);
+  chartGPS   =mkChart('chart-gps',  serie.map(e=>e.norte?e.norte.gps:null),  serie.map(e=>e.pdtn?e.pdtn.gps:null),  labels);
+  chartPorta =mkChart('chart-porta',serie.map(e=>e.norte?e.norte.porta:null),serie.map(e=>e.pdtn?e.pdtn.porta:null),labels);
+  chartTemp  =mkChart('chart-temp', serie.map(e=>e.norte?e.norte.temp:null), serie.map(e=>e.pdtn?e.pdtn.temp:null), labels);
+  chartVolt  =mkChart('chart-volt', serie.map(e=>e.norte?e.norte.volt:null), serie.map(e=>e.pdtn?e.pdtn.volt:null), labels);
   const tEl=document.getElementById('history-table');
   if(!data.length){tEl.innerHTML='<div class="no-data">Sem histórico.</div>';return;}
   const rows=data.map(e=>`<div class="hrow"><span style="font-weight:500">Sem ${e.week}</span><span style="color:var(--muted)">${e.date}</span><span><span class="pill ${e.norte.gps>=85?'p-green':e.norte.gps>=70?'p-amber':'p-red'}">${e.norte.gps}%</span></span><span><span class="pill ${e.pdtn.gps>=85?'p-green':e.pdtn.gps>=70?'p-amber':'p-red'}">${e.pdtn.gps}%</span></span><span style="color:var(--muted)">${e.norte.porta}%</span><span style="color:var(--muted)">${e.pdtn.porta}%</span><span style="color:var(--muted)">${e.norte.volt}%</span><span style="font-size:11px;color:var(--hint)">${alreadySaved||e.week!==cur.week?'💾':'⏳'}</span></div>`).join('');
