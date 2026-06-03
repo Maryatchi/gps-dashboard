@@ -434,7 +434,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   <path d="M140 13 Q145 1 149 4" fill="none" stroke="#14b8a6" stroke-width="0.8" opacity="0.4"/>
 </svg></div>
       <div style="display:flex;flex-direction:column;justify-content:center;line-height:1.15"><span style="font-size:17px;font-weight:700;letter-spacing:-.3px;color:var(--text)">GPS Dashboard</span><span style="font-size:11px;font-weight:500;color:#5eead4;letter-spacing:.02em">by Daniel Coelho</span></div>
-      <span class="week-badge" id="week-badge">—</span>
+      <span class="week-badge" id="week-badge" onclick="editarSemana()" title="Clica para ajustar a semana manualmente" style="cursor:pointer">—</span>
       <span class="region-badge">Norte &amp; PDTN</span>
       <span class="save-ind" id="save-ind">💾 guardado</span>
     </div>
@@ -1811,11 +1811,49 @@ function openDashboard() {
   document.getElementById('loader').style.display = 'none';
   document.getElementById('dashboard').style.display = 'block';
   applyTheme(localStorage.getItem('fleet_theme') || 'dark');
+  sincronizarSemanaAtual();
   document.getElementById('week-badge').textContent = meta.week; const cmb=document.getElementById('cmb-week-badge'); if(cmb) cmb.textContent=meta.week;
   edits = ls(K_EDITS) || edits;
   migrateGaleraFromNotes();
   upBadge();
   renderAll();
+}
+
+// ── GESTÃO AUTOMÁTICA DA SEMANA ───────────────────────────────────────────────
+// Atualiza meta para a semana ISO real de hoje (corre ao abrir e pode ser chamada periodicamente).
+// Não mexe nos dados das viaturas — só na etiqueta da semana usada ao guardar.
+function sincronizarSemanaAtual() {
+  const hoje = new Date();
+  const wReal = getWeekNum(hoje);
+  const yReal = hoje.getFullYear();
+  if (meta.weekNum !== wReal || meta.year !== yReal) {
+    meta = { week: `Sem ${wReal} · ${yReal}`, date: hoje.toLocaleDateString('pt-PT'), weekNum: wReal, year: yReal };
+    ls(K_META, meta);
+    syncToSupabase(K_META, meta);
+  }
+}
+
+// Permite ajustar a semana manualmente (ex.: processar a semana passada que a empresa atrasou)
+function editarSemana() {
+  const atual = meta.weekNum || getWeekNum(new Date());
+  const wReal = getWeekNum(new Date());
+  const input = prompt(
+    'Número da semana a registar:\n\n' +
+    '(semana real de hoje = ' + wReal + ')\n' +
+    'Deixa em branco para usar a semana real.',
+    atual
+  );
+  if (input === null) return; // cancelou
+  let wn = parseInt(String(input).trim());
+  const yr = meta.year || new Date().getFullYear();
+  if (!input.trim()) wn = wReal; // vazio = semana real
+  if (isNaN(wn) || wn < 1 || wn > 53) { alert('Número de semana inválido (1-53).'); return; }
+  meta = { week: `Sem ${wn} · ${yr}`, date: new Date().toLocaleDateString('pt-PT'), weekNum: wn, year: yr };
+  ls(K_META, meta);
+  syncToSupabase(K_META, meta);
+  document.getElementById('week-badge').textContent = meta.week;
+  const cmb = document.getElementById('cmb-week-badge'); if (cmb) cmb.textContent = meta.week;
+  showSync('Semana ajustada para ' + wn, '#22c55e');
 }
 
 function goToLoader() {
@@ -2834,7 +2872,7 @@ function genStagePorta(file) {
 function generateBaseJSON() {
   if (!genPosData || !genPortaSet) return;
 
-  const weekNum = parseInt(document.getElementById('gen-week').value) || meta.weekNum || 20;
+  const weekNum = parseInt(document.getElementById('gen-week').value) || meta.weekNum || getWeekNum(new Date());
   const year = parseInt(document.getElementById('gen-year').value) || 2026;
   const now = new Date();
   const thresholdDays = parseInt(document.getElementById('gen-threshold')?.value || '3');
@@ -3776,6 +3814,18 @@ switchTab = function(id, btn) {
   if(id==='plano') renderPlano();
 };
 
+// Pré-preencher a semana/ano reais ao abrir o gerador de Base JSON
+const _genSwitchTab = switchTab;
+switchTab = function(id, btn) {
+  _genSwitchTab(id, btn);
+  if (id === 'gerar') {
+    const w = document.getElementById('gen-week');
+    const y = document.getElementById('gen-year');
+    if (w && !w.value) w.value = meta.weekNum || getWeekNum(new Date());
+    if (y && !y.value) y.value = meta.year || new Date().getFullYear();
+  }
+};
+
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
 // Auto-activar tab Campo em ecrãs pequenos
@@ -3784,7 +3834,20 @@ if (window.innerWidth <= 600) {
   if (campoBtn) { document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); document.querySelectorAll('.tab-page').forEach(p=>p.classList.remove('active')); campoBtn.classList.add('active'); document.getElementById('page-campo')?.classList.add('active'); }
 }
 
-checkPrevSession();// ── BACKUP / RESTAURO COMPLETO ────────────────────────────────────────────────
+checkPrevSession();
+
+// Verificar a cada hora se a semana ISO mudou (apanha a viragem de segunda-feira com a app aberta)
+setInterval(function() {
+  if (document.getElementById('dashboard').style.display !== 'none') {
+    const wAntes = meta.weekNum;
+    sincronizarSemanaAtual();
+    if (meta.weekNum !== wAntes) {
+      const wb = document.getElementById('week-badge'); if (wb) wb.textContent = meta.week;
+      const cmb = document.getElementById('cmb-week-badge'); if (cmb) cmb.textContent = meta.week;
+      showSync('Nova semana: ' + meta.week, '#93c5fd');
+    }
+  }
+}, 3600000); // 1 hora// ── BACKUP / RESTAURO COMPLETO ────────────────────────────────────────────────
 function backupCompleto() {
   const allKeys = [K_VEHICLES, K_EDITS, K_META, K_HISTORY, K_OFICINAS, K_EXTRAS, K_REMOVED, K_REG, K_PLANO, K_VH];
   const payload = {
