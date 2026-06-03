@@ -17,6 +17,22 @@
   --teal:#14b8a6;--teal-dim:rgba(20,184,166,0.11);
   --r:8px;--rl:12px;--rxl:16px;
 }
+body.light{
+  --bg:#f1f5f9;--surface:#ffffff;--surface2:#f8fafc;--surface3:#eef2f7;
+  --border:rgba(15,23,42,0.08);--border2:rgba(15,23,42,0.16);
+  --text:#1e293b;--muted:#64748b;--hint:#94a3b8;
+  --blue:#2563eb;--blue-dim:rgba(37,99,235,0.10);
+  --green:#16a34a;--green-dim:rgba(22,163,74,0.12);
+  --amber:#d97706;--amber-dim:rgba(217,119,6,0.12);
+  --red:#dc2626;--red-dim:rgba(220,38,38,0.10);
+  --teal:#0d9488;--teal-dim:rgba(13,148,136,0.12);
+}
+body.light .topbar,body.light .tab-bar{box-shadow:0 1px 3px rgba(15,23,42,0.06)}
+body.light .pill.p-green{color:#15803d}
+body.light .pill.p-amber{color:#b45309}
+body.light .pill.p-red{color:#b91c1c}
+body.light .pill.p-blue{color:#1d4ed8}
+body.light .pill.p-teal{color:#0f766e}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
 
@@ -153,6 +169,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .modal-overlay.open{display:flex}
 .modal{background:var(--surface);border:1px solid var(--border2);border-radius:var(--rxl);width:100%;max-width:520px;max-height:90vh;overflow-y:auto;animation:slideUp .2s ease}
 @keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .modal-header{padding:1.25rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
 .modal-title{font-size:16px;font-weight:600}.modal-plate{font-family:'DM Mono',monospace;font-size:13px;color:var(--muted);margin-top:2px}
 .modal-close{width:32px;height:32px;border-radius:var(--r);background:var(--surface2);border:1px solid var(--border2);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;transition:all .2s}
@@ -419,10 +436,15 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <button class="btn-sm" onclick="toggleUpdPanel()">📥 Atualizações</button>
       <button class="btn-green" onclick="exportRelatorioTransportador()">📤 Relatório</button>
       <button class="btn-sm" onclick="forceSyncFromCloud()">🔄 Sincronizar</button>
+      <button class="btn-sm" onclick="backupCompleto()" title="Descarregar cópia de segurança completa">💾 Backup</button>
+      <button class="btn-sm" onclick="document.getElementById('fi-restore').click()" title="Restaurar a partir de um backup">📥 Restaurar</button>
+      <input type="file" id="fi-restore" accept=".json" style="display:none" onchange="restaurarBackup(this.files[0])">
       <button class="btn-green" onclick="openAddVehicleModal()">➕ Viatura</button>
       <button class="btn-sm" onclick="goToLoader()">📂 Novos ficheiros</button>
+      <button class="btn-sm" id="theme-toggle" onclick="toggleTheme()" title="Alternar tema claro/escuro">🌙</button>
       <button class="btn-sm" onclick="window.print()">🖨 Imprimir</button>
       <button class="btn-green" onclick="exportExcel()">📊 Excel</button>
+      <button class="btn-blue" onclick="exportFormatoEmpresa()" title="Exporta no mesmo formato do ficheiro semanal da empresa, com as tuas correções aplicadas">🏢 Formato Empresa</button>
     </div>
   </div>
 
@@ -562,6 +584,18 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
             <button onclick="exportRegistosExcel()" class="btn-green">📊 Excel</button>
             <button onclick="clearRegistos()" class="btn-sm" style="color:#ef4444">🗑 Limpar tudo</button>
           </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;align-items:center">
+          <input class="sinput" type="text" id="reg-search" placeholder="🔍 Pesquisar matrícula, nota..." oninput="renderRegistos()" style="margin-bottom:0;flex:1;min-width:180px">
+          <select id="reg-filter-estado" onchange="renderRegistos()" style="background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:7px 10px;outline:none;cursor:pointer">
+            <option value="all">Todos os estados</option>
+            <option value="pendente">⏳ Pendentes</option>
+            <option value="resolvido">✅ Resolvidos</option>
+          </select>
+          <select id="reg-filter-prob" onchange="renderRegistos()" style="background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:7px 10px;outline:none;cursor:pointer">
+            <option value="all">Todos os problemas</option>
+          </select>
+          <span id="reg-count" style="font-size:12px;color:var(--muted);font-family:'DM Mono',monospace;white-space:nowrap"></span>
         </div>
         <div id="registos-table-wrap" style="overflow-x:auto">
           <table class="data-table" id="registos-table">
@@ -892,10 +926,99 @@ function showSync(msg, color) {
   el.style.display = 'inline'; clearTimeout(el._t);
   el._t = setTimeout(function() { el.style.display='none'; }, 3000);
 }
-async function syncToSupabase(key, val) {
-  try { const sb = getSB(); await sb.from('fleet_state').upsert({ key: key, value: val, updated_at: new Date().toISOString() }); }
-  catch(e) { console.warn('sync error', e); }
+// Estado de sincronização — guarda as gravações que falharam para re-tentar
+const _pendingSync = {};   // key -> valor mais recente por sincronizar
+let _retryTimer = null;
+
+// Extrai apenas a mensagem de texto de um erro, sem tocar em objetos não-clonáveis (Headers, Response)
+function errMsg(e) {
+  if (!e) return 'erro desconhecido';
+  if (typeof e === 'string') return e;
+  if (typeof e.message === 'string') return e.message;
+  if (typeof e.error_description === 'string') return e.error_description;
+  if (typeof e.hint === 'string') return e.hint;
+  if (typeof e.details === 'string') return e.details;
+  if (typeof e.code === 'string') return 'código ' + e.code;
+  return 'erro de sincronização';
 }
+
+async function syncToSupabase(key, val) {
+  try {
+    const sb = getSB();
+    const res = await sb.from('fleet_state').upsert({ key: key, value: val, updated_at: new Date().toISOString() });
+    // Verificar erro sem desestruturar (evita tocar em propriedades não-clonáveis)
+    if (res && res.error) {
+      console.warn('sync error', key, errMsg(res.error));
+      _pendingSync[key] = val;
+      updateSyncDot();
+      scheduleRetry();
+      return false;
+    }
+    // Sucesso — limpar pendência desta chave
+    delete _pendingSync[key];
+    updateSyncDot();
+    return true;
+  } catch(e) {
+    console.warn('sync error', key, errMsg(e));
+    _pendingSync[key] = val;
+    updateSyncDot();
+    scheduleRetry();
+    return false;
+  }
+}
+
+// Re-tentar automaticamente as gravações pendentes
+function scheduleRetry() {
+  if (_retryTimer) return;
+  _retryTimer = setTimeout(async function() {
+    _retryTimer = null;
+    const keys = Object.keys(_pendingSync);
+    if (!keys.length) return;
+    showSync('A re-tentar guardar...', '#93c5fd');
+    for (const k of keys) {
+      const v = _pendingSync[k];
+      try {
+        const sb = getSB();
+        const { error } = await sb.from('fleet_state').upsert({ key: k, value: v, updated_at: new Date().toISOString() });
+        if (error) throw error;
+        delete _pendingSync[k];
+      } catch(e) { console.warn('retry falhou', k, errMsg(e)); }
+    }
+    updateSyncDot();
+    if (Object.keys(_pendingSync).length) { scheduleRetry(); }
+    else { showSync('Tudo guardado na cloud ✓', '#22c55e'); }
+  }, 8000); // re-tenta a cada 8 segundos
+}
+
+// Indicador visual de pendências por sincronizar
+function updateSyncDot() {
+  const n = Object.keys(_pendingSync).length;
+  let dot = document.getElementById('sync-dot');
+  if (!dot) {
+    dot = document.createElement('div');
+    dot.id = 'sync-dot';
+    dot.style.cssText = 'position:fixed;bottom:16px;left:16px;z-index:500;display:none;align-items:center;gap:8px;background:#1a1e25;border:1px solid rgba(245,158,11,.5);border-radius:99px;padding:7px 14px;font-size:12px;font-weight:500;color:#fcd34d;box-shadow:0 4px 16px rgba(0,0,0,.4);cursor:pointer';
+    dot.onclick = function(){ scheduleRetry(); showSync('A forçar sincronização...', '#93c5fd'); };
+    dot.title = 'Clica para re-tentar guardar agora';
+    document.body.appendChild(dot);
+  }
+  if (n > 0) {
+    dot.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:#f59e0b;display:inline-block;animation:pulse 1.5s infinite"></span>' +
+                    '<span>' + n + ' altera\u00e7\u00e3o' + (n>1?'es':'') + ' por guardar</span>';
+    dot.style.display = 'flex';
+  } else {
+    dot.style.display = 'none';
+  }
+}
+
+// Avisar antes de fechar se houver pendências por guardar
+window.addEventListener('beforeunload', function(e) {
+  if (Object.keys(_pendingSync).length > 0) {
+    e.preventDefault();
+    e.returnValue = 'Há alterações que ainda não foram guardadas na cloud. Tens a certeza que queres sair?';
+    return e.returnValue;
+  }
+});
 async function loadFromSupabase() {
   try {
     showSync('A carregar...', '#93c5fd');
@@ -915,6 +1038,43 @@ async function loadFromSupabase() {
     if (!r2.error && r2.data) r2.data.forEach(function(row) {
       if (row.value === null) return;
       // Registos: merge inteligente — preservar resolved:true local mesmo após sync
+      // Histórico por viatura: merge por chave de viatura (nunca perder semanas locais)
+      if (row.key === 'fleet_vhistory_v2') {
+        const localVH = JSON.parse(localStorage.getItem('fleet_vhistory_v2') || 'null');
+        const cloudVH = row.value;
+        if (localVH && typeof localVH === 'object' && cloudVH && typeof cloudVH === 'object') {
+          const merged = Object.assign({}, cloudVH);
+          Object.keys(localVH).forEach(function(plate) {
+            const localEntries = localVH[plate] || [];
+            const cloudEntries = merged[plate] || [];
+            const seen = {};
+            const combined = [];
+            cloudEntries.concat(localEntries).forEach(function(e) {
+              const k = e.week + '|' + e.year;
+              seen[k] = e; // local sobrepõe cloud para a mesma semana
+            });
+            Object.keys(seen).forEach(function(k){ combined.push(seen[k]); });
+            combined.sort(function(a,b){ return a.year!==b.year ? a.year-b.year : a.week-b.week; });
+            merged[plate] = combined;
+          });
+          localStorage.setItem(row.key, JSON.stringify(merged));
+        } else {
+          localStorage.setItem(row.key, JSON.stringify(row.value));
+        }
+        return;
+      }
+      // Plano kanban / Removidas / Oficinas: cloud só sobrescreve se tiver conteúdo
+      if (row.key === 'fleet_plano_v2' || row.key === 'fleet_removed_v2' || row.key === 'fleet_oficinas_v2') {
+        const cloudVal = row.value;
+        const isEmpty = !cloudVal || (Array.isArray(cloudVal) && cloudVal.length === 0) || (typeof cloudVal === 'object' && !Array.isArray(cloudVal) && Object.keys(cloudVal).length === 0);
+        const localRaw = localStorage.getItem(row.key);
+        // Se a cloud está vazia mas tens dados locais, mantém os locais
+        if (isEmpty && localRaw && localRaw !== 'null' && localRaw !== '{}' && localRaw !== '[]') {
+          return;
+        }
+        localStorage.setItem(row.key, JSON.stringify(cloudVal));
+        return;
+      }
       if (row.key === 'fleet_registos_v2') {
         const localRegs = JSON.parse(localStorage.getItem('fleet_registos_v2') || 'null');
         const cloudRegs = row.value;
@@ -953,6 +1113,10 @@ async function forceSyncFromCloud() {
     const wb = document.getElementById('week-badge');
     if (wb) wb.textContent = meta.week;
     upBadge(); renderAll();
+    // Re-renderizar a tab ativa (plano/campo lêem direto do localStorage)
+    if (document.getElementById('page-plano')?.classList.contains('active')) renderPlano();
+    if (document.getElementById('page-campo')?.classList.contains('active')) renderCampo();
+    if (document.getElementById('page-registos')?.classList.contains('active')) renderRegistos();
     showSync('Dashboard actualizada!', '#22c55e');
   }
 }
@@ -975,6 +1139,27 @@ async function saveWeekToSupabase(wn, yr) {
     showSync('Erro ao guardar', '#f59e0b');
   }
 }
+
+// ── TEMA CLARO / ESCURO ───────────────────────────────────────────────────────
+function applyTheme(theme) {
+  const isLight = theme === 'light';
+  document.body.classList.toggle('light', isLight);
+  const btn = document.getElementById('theme-toggle');
+  if (btn) btn.textContent = isLight ? '☀️' : '🌙';
+}
+function toggleTheme() {
+  const isLight = document.body.classList.contains('light');
+  const next = isLight ? 'dark' : 'light';
+  try { localStorage.setItem('fleet_theme', next); } catch(e) {}
+  applyTheme(next);
+}
+// Aplicar tema guardado o mais cedo possível
+(function() {
+  try {
+    const saved = localStorage.getItem('fleet_theme');
+    if (saved === 'light') document.body.classList.add('light');
+  } catch(e) {}
+})();
 
 // ── STORAGE KEYS ──────────────────────────────────────────────────────────────
 const K_VEHICLES  = 'fleet_vehicles_v2';
@@ -1200,9 +1385,160 @@ function checkStartReady() {
   document.getElementById('btn-start').classList.toggle('ready', ready);
 }
 
+let _editsSnapshotByMat = {};   // mat -> {edit, vehicle} guardado antes de carregar ficheiro empresa
+let _pendingConflicts = [];     // conflitos detetados a aguardar decisão
+
+// Remapeia edits por matrícula para o novo ALL_VEHICLES e deteta conflitos
+function remapEditsAndDetectConflicts() {
+  const newEdits = {};
+  _pendingConflicts = [];
+
+  // Mapa matrícula -> índice no novo array
+  const matToIdx = {};
+  ALL_VEHICLES.forEach((v, i) => {
+    const k = norm(v.mat) || norm(v.plate);
+    if (k) matToIdx[k] = i;
+  });
+
+  Object.keys(_editsSnapshotByMat).forEach(mat => {
+    const snap = _editsSnapshotByMat[mat];
+    const newIdx = matToIdx[mat];
+    if (newIdx === undefined) {
+      // Viatura corrigida já não está no ficheiro novo — ignorar (provavelmente saiu da frota)
+      return;
+    }
+    const e = snap.edit;
+    const empV = ALL_VEHICLES[newIdx]; // dados que a empresa enviou
+
+    // Detetar campos onde a TUA correção difere do que a empresa diz
+    const fields = [
+      { k: 'gps',   label: 'GPS',         mine: e.gps,   theirs: empV.msgGPS },
+      { k: 'porta', label: 'Sensor Porta', mine: e.porta, theirs: empV.msgPorta },
+      { k: 'temp',  label: 'Temperatura', mine: e.temp,  theirs: empV.msgTemp },
+      { k: 'obs',   label: 'Observações', mine: e.obs,   theirs: empV.obs },
+    ];
+    const diffs = fields.filter(f => f.mine !== undefined && f.mine !== '' && String(f.mine) !== String(f.theirs||''));
+
+    // Sempre re-aplicar o edit ao novo índice (preserva correção)
+    newEdits[newIdx] = e;
+
+    if (diffs.length) {
+      _pendingConflicts.push({
+        idx: newIdx,
+        mat: empV.plate || empV.mat,
+        transp: empV.transp,
+        diffs: diffs.map(d => ({ campo: d.label, k: d.k, minha: d.mine || '—', empresa: d.theirs || '—' })),
+        edit: e,
+      });
+    }
+  });
+
+  // Aplicar os edits remapeados (mantém as tuas correções por cima dos dados da empresa)
+  edits = newEdits;
+
+  if (_pendingConflicts.length) {
+    showConflictPanel();
+  }
+}
+
+// Painel que mostra os conflitos e deixa escolher: manter as minhas vs aceitar as deles
+function showConflictPanel() {
+  document.getElementById('conflict-overlay')?.remove();
+  const ov = document.createElement('div');
+  ov.id = 'conflict-overlay';
+  ov.className = 'modal-overlay open';
+  ov.style.zIndex = '300';
+
+  const rows = _pendingConflicts.map((c, ci) => {
+    const diffRows = c.diffs.map(d =>
+      `<div style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;padding:4px 0;font-size:12px;align-items:center">
+        <span style="color:var(--muted)">${d.campo}</span>
+        <span style="color:#86efac">✏ ${d.minha}</span>
+        <span style="color:#fca5a5">🏢 ${d.empresa}</span>
+      </div>`).join('');
+    return `<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);padding:12px;margin-bottom:8px" id="conflict-row-${ci}">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span style="font-family:'DM Mono',monospace;font-weight:600;font-size:14px">${c.mat}</span>
+        <span style="font-size:11px;color:var(--muted)">${c.transp}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--hint);margin-bottom:4px">
+        <span>Campo</span><span>✏ A tua correção</span><span>🏢 Ficheiro empresa</span>
+      </div>
+      ${diffRows}
+      <div style="display:flex;gap:6px;margin-top:10px">
+        <button onclick="resolveConflict(${ci},'mine')" class="btn-green" style="flex:1;padding:6px">✏ Manter a minha</button>
+        <button onclick="resolveConflict(${ci},'theirs')" class="btn-sm" style="flex:1;padding:6px">🏢 Aceitar a deles</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  ov.innerHTML = `<div class="modal" style="max-width:640px" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">⚠️ ${_pendingConflicts.length} conflito${_pendingConflicts.length>1?'s':''} detetado${_pendingConflicts.length>1?'s':''}</div>
+        <div class="modal-plate">O ficheiro da empresa difere das tuas correções</div>
+      </div>
+      <button class="modal-close" onclick="closeConflictPanel()">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:var(--blue-dim);border:1px solid rgba(59,130,246,.25);border-radius:var(--r);padding:10px 12px;font-size:12px;color:#93c5fd;margin-bottom:1rem;line-height:1.6">
+        Para cada viatura, escolhe se mantens a <strong style="color:#86efac">tua correção</strong> ou aceitas o que vem no <strong style="color:#fca5a5">ficheiro da empresa</strong>. Por defeito, as tuas correções são mantidas.
+      </div>
+      ${rows}
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="resolveAllConflicts('theirs')" style="margin-right:auto">🏢 Aceitar todas as deles</button>
+      <button class="btn-save" onclick="resolveAllConflicts('mine')">✏ Manter todas as minhas</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+}
+
+function resolveConflict(ci, choice) {
+  const c = _pendingConflicts[ci];
+  if (!c) return;
+  if (choice === 'theirs') {
+    // Aceitar os dados da empresa — remover os campos em conflito do edit
+    const e = edits[c.idx] || {};
+    c.diffs.forEach(d => { delete e[d.k]; });
+    if (Object.keys(e).length === 0) delete edits[c.idx]; else edits[c.idx] = e;
+  }
+  // se 'mine', não faz nada (o edit já está aplicado)
+  const row = document.getElementById('conflict-row-' + ci);
+  if (row) {
+    row.style.opacity = '0.4';
+    row.style.pointerEvents = 'none';
+    const tag = document.createElement('div');
+    tag.style.cssText = 'font-size:11px;margin-top:6px;color:' + (choice==='mine'?'#86efac':'#fca5a5');
+    tag.textContent = choice==='mine' ? '✓ Mantida a tua correção' : '✓ Aceite a versão da empresa';
+    row.appendChild(tag);
+  }
+}
+
+function resolveAllConflicts(choice) {
+  _pendingConflicts.forEach((c, ci) => resolveConflict(ci, choice));
+  setTimeout(closeConflictPanel, 400);
+}
+
+function closeConflictPanel() {
+  document.getElementById('conflict-overlay')?.remove();
+  _pendingConflicts = [];
+  if (typeof renderAll === 'function' && document.getElementById('dashboard').style.display !== 'none') {
+    saveEdits(); renderAll();
+  }
+}
+
 function loadBase(file) {
   if (!file) return;
   setLoaderErr('');
+  // Snapshot das correções atuais por matrícula (antes de substituir ALL_VEHICLES)
+  _editsSnapshotByMat = {};
+  ALL_VEHICLES.forEach((v, i) => {
+    if (edits[i]) {
+      const key = norm(v.mat) || norm(v.plate);
+      if (key) _editsSnapshotByMat[key] = { edit: edits[i], vehicle: v };
+    }
+  });
   const reader = new FileReader();
   reader.onload = e => {
     try {
@@ -1243,6 +1579,10 @@ function loadBase(file) {
       meta = { week: `Sem ${wn} · ${yr}`, date: dt, weekNum: wn, year: yr };
 
       mergeExtras();
+
+      // ── REMAPEAR edits por matrícula e detetar conflitos com o ficheiro da empresa ──
+      remapEditsAndDetectConflicts();
+
       setDzDone('dz-base', 'dz-base-name', file.name, `${ALL_VEHICLES.length} veículos`);
       document.getElementById('lc1').classList.add('loaded');
       checkStartReady();
@@ -1431,6 +1771,7 @@ function migrateGaleraFromNotes() {
 function openDashboard() {
   document.getElementById('loader').style.display = 'none';
   document.getElementById('dashboard').style.display = 'block';
+  applyTheme(localStorage.getItem('fleet_theme') || 'dark');
   document.getElementById('week-badge').textContent = meta.week; const cmb=document.getElementById('cmb-week-badge'); if(cmb) cmb.textContent=meta.week;
   edits = ls(K_EDITS) || edits;
   migrateGaleraFromNotes();
@@ -1762,7 +2103,7 @@ function applyOpFiles() {
     else if(cur==='Sinistro' && !stagedLookups[0] && stagedLookups[1] && !stagedLookups[1][mn] && !stagedLookups[1][pn]){edits[i]={...(edits[i]||{}),obs:''};removed++;}
   });
   upBadge(); renderAll();
-  ls(K_OFICINAS,{l1:stagedLookups[0],l2:stagedLookups[1]});
+  const ofData={l1:stagedLookups[0],l2:stagedLookups[1]};ls(K_OFICINAS,ofData);syncToSupabase(K_OFICINAS,ofData);
   const newOf=ALL_VEHICLES.map((_,i)=>(edits[i]?.obs!==undefined?edits[i].obs:ALL_VEHICLES[i].obs)).filter(o=>o==='Oficina').length;
   const newSin=ALL_VEHICLES.map((_,i)=>(edits[i]?.obs!==undefined?edits[i].obs:ALL_VEHICLES[i].obs)).filter(o=>o==='Sinistro').length;
   const names=[stagedNames[0],stagedNames[1]].filter(Boolean).join(' + ');
@@ -1856,6 +2197,50 @@ function renderTrend() {
   if(!data.length){tEl.innerHTML='<div class="no-data">Sem histórico.</div>';return;}
   const rows=data.map(e=>`<div class="hrow"><span style="font-weight:500">Sem ${e.week}</span><span style="color:var(--muted)">${e.date}</span><span><span class="pill ${e.norte.gps>=85?'p-green':e.norte.gps>=70?'p-amber':'p-red'}">${e.norte.gps}%</span></span><span><span class="pill ${e.pdtn.gps>=85?'p-green':e.pdtn.gps>=70?'p-amber':'p-red'}">${e.pdtn.gps}%</span></span><span style="color:var(--muted)">${e.norte.porta}%</span><span style="color:var(--muted)">${e.pdtn.porta}%</span><span style="color:var(--muted)">${e.norte.volt}%</span><span style="font-size:11px;color:var(--hint)">${alreadySaved||e.week!==cur.week?'💾':'⏳'}</span></div>`).join('');
   tEl.innerHTML=`<div class="hrow hhead"><span>Semana</span><span>Data</span><span>GPS Norte</span><span>GPS PDTN</span><span>Porta Norte</span><span>Porta PDTN</span><span>Volt Norte</span><span>Estado</span></div>`+rows;
+}
+
+// ── EXPORT NO FORMATO DA EMPRESA ──────────────────────────────────────────────
+// Gera um Excel com as MESMAS colunas que o ficheiro semanal da empresa (sheet auxDados),
+// refletindo o estado atual da dashboard COM as tuas correções aplicadas.
+function exportFormatoEmpresa() {
+  if (!ALL_VEHICLES.length) { alert('Sem dados para exportar.'); return; }
+  const bool = b => b ? 'TRUE' : 'FALSE';
+
+  // Cabeçalhos exatamente como loadBase os espera
+  const headers = ['Matricula','licensePlate','TipoVeiculo','Transportador','Região',
+    'Observações','MsgGPS','MsgPorta','MsgTemp','MsgVolt','Status',
+    'GpsOK','PortaOK','TemperaturasOK','TacografoOK','CanBusOK','VoltageOK'];
+
+  const rows = ALL_VEHICLES.map((v, i) => {
+    const ev = getEff(v, i); // estado efetivo = dados base + as tuas correções
+    return [
+      ev.mat || '',
+      ev.plate || '',
+      ev.tipo || '',
+      ev.transp || '',
+      ev.regiao || '',
+      ev.obs || '',
+      ev.msgGPS || '',
+      ev.msgPorta || '',
+      ev.msgTemp || '',
+      ev.msgVolt || '',
+      ev.status || '',
+      bool(ev.gpsOK),
+      bool(ev.portaOK),
+      bool(ev.tempOK),
+      bool(ev.tacoOK),
+      bool(ev.canbusOK),
+      bool(ev.voltOK),
+    ];
+  });
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  ws['!cols'] = [{wch:14},{wch:12},{wch:11},{wch:13},{wch:8},{wch:14},{wch:14},{wch:14},{wch:14},{wch:14},{wch:10},{wch:8},{wch:9},{wch:15},{wch:12},{wch:10},{wch:10}];
+  // Nome de sheet "auxDados" para ser reconhecido por loadBase no futuro
+  XLSX.utils.book_append_sheet(wb, ws, 'auxDados');
+  XLSX.writeFile(wb, `Base_FormatoEmpresa_Sem${meta.weekNum}_${meta.year}.xlsx`);
+  showSync('Exportado no formato empresa ✓', '#22c55e');
 }
 
 // ── EXCEL EXPORT ──────────────────────────────────────────────────────────────
@@ -1962,7 +2347,7 @@ function parseGenericFile(file, cb) {
 const K_REMOVED = 'fleet_removed_v2';
 
 function getRemoved() { return new Set(ls(K_REMOVED) || []); }
-function saveRemoved(set) { ls(K_REMOVED, [...set]); }
+function saveRemoved(set) { ls(K_REMOVED, [...set]); syncToSupabase(K_REMOVED, [...set]); }
 
 function applyRemoverData(rows, fname, stElId, resultElId, errElId) {
   const resEl = document.getElementById(resultElId);
@@ -2696,14 +3081,51 @@ function renderRegistos() {
   const regs = getRegistos();
   const tbody = document.getElementById('registos-body');
   const empty = document.getElementById('registos-empty');
+  const countEl = document.getElementById('reg-count');
   if (!tbody) return;
+
+  // Popular/atualizar dropdown de problemas mantendo a seleção
+  const probSel = document.getElementById('reg-filter-prob');
+  if (probSel) {
+    const probs = [...new Set(regs.map(r => r.problema).filter(Boolean))].sort();
+    const existing = [...probSel.options].slice(1).map(o => o.value);
+    if (probs.join('|') !== existing.join('|')) {
+      const cur = probSel.value;
+      probSel.innerHTML = '<option value="all">Todos os problemas</option>';
+      probs.forEach(p => { const o = document.createElement('option'); o.value = p; o.textContent = p; probSel.appendChild(o); });
+      if (probs.includes(cur)) probSel.value = cur;
+    }
+  }
+
+  // Ler filtros
+  const q = (document.getElementById('reg-search')?.value || '').toLowerCase().trim();
+  const fEstado = document.getElementById('reg-filter-estado')?.value || 'all';
+  const fProb = document.getElementById('reg-filter-prob')?.value || 'all';
+
+  // Manter índice original para resolveRegisto/removeRegisto funcionarem após filtro
+  let indexed = regs.map((r, i) => ({ r, i }));
+  if (fEstado === 'pendente') indexed = indexed.filter(o => !o.r.resolved);
+  else if (fEstado === 'resolvido') indexed = indexed.filter(o => o.r.resolved);
+  if (fProb !== 'all') indexed = indexed.filter(o => o.r.problema === fProb);
+  if (q) indexed = indexed.filter(o => {
+    const r = o.r;
+    return ((r.mat||'') + ' ' + (r.transp||findTransp(r.mat)) + ' ' + (r.problema||'') + ' ' + (r.nota||'')).toLowerCase().includes(q);
+  });
+
+  if (countEl) {
+    const totalReg = regs.length;
+    countEl.textContent = indexed.length === totalReg ? `${totalReg} registos` : `${indexed.length} de ${totalReg}`;
+  }
+
   if (!regs.length) {
     tbody.innerHTML = '';
-    if (empty) empty.style.display = 'block';
+    if (empty) { empty.style.display = 'block'; empty.textContent = 'Sem registos. Adiciona a primeira intervenção acima.'; }
     return;
   }
-  if (empty) empty.style.display = 'none';
-  tbody.innerHTML = regs.map((r,i) => {
+  if (empty) empty.style.display = indexed.length ? 'none' : 'block';
+  if (empty && !indexed.length) empty.textContent = 'Nenhum registo corresponde aos filtros.';
+
+  tbody.innerHTML = indexed.map(({ r, i }) => {
     const resolved = r.resolved;
     const rowStyle = resolved ? 'border-left:3px solid #22c55e;background:rgba(34,197,94,.06);' : '';
     const resolveBtn = resolved
@@ -3096,7 +3518,7 @@ const PLANO_COLS = [
 ];
 
 function getPlano() { return ls(K_PLANO)||{}; }
-function savePlano(p){ ls(K_PLANO,p); }
+function savePlano(p){ ls(K_PLANO,p); syncToSupabase(K_PLANO,p); }
 
 function movePlano(vIdx, toCol) {
   const p=getPlano();
@@ -3183,6 +3605,7 @@ function saveVehicleToHistory() {
     if(hist[key].length>20) hist[key]=hist[key].slice(-20);
   });
   ls(K_VH,hist);
+  syncToSupabase(K_VH,hist);
 }
 
 function renderVehicleHistory(plate) {
@@ -3302,7 +3725,86 @@ if (window.innerWidth <= 600) {
   if (campoBtn) { document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); document.querySelectorAll('.tab-page').forEach(p=>p.classList.remove('active')); campoBtn.classList.add('active'); document.getElementById('page-campo')?.classList.add('active'); }
 }
 
-checkPrevSession();// ── EMPRESA FILE MODE ─────────────────────────────────────────────────────────
+checkPrevSession();// ── BACKUP / RESTAURO COMPLETO ────────────────────────────────────────────────
+function backupCompleto() {
+  const allKeys = [K_VEHICLES, K_EDITS, K_META, K_HISTORY, K_OFICINAS, K_EXTRAS, K_REMOVED, K_REG, K_PLANO, K_VH];
+  const payload = {
+    _formato: 'gps-dashboard-backup',
+    _versao: 2,
+    _gerado: new Date().toISOString(),
+    _semana: meta.week,
+    _nVeiculos: ALL_VEHICLES.length,
+    dados: {}
+  };
+  allKeys.forEach(function(k) {
+    const v = ls(k);
+    if (v !== null) payload.dados[k] = v;
+  });
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
+  a.href = url;
+  a.download = 'GPS_Dashboard_Backup_' + (meta.weekNum||'') + '_' + stamp + '.json';
+  document.body.appendChild(a); a.click();
+  setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+  showSync('Backup descarregado ✓', '#22c55e');
+}
+
+function restaurarBackup(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const payload = JSON.parse(e.target.result);
+      if (payload._formato !== 'gps-dashboard-backup' || !payload.dados) {
+        alert('⚠️ Ficheiro inválido. Não parece ser um backup do GPS Dashboard.');
+        return;
+      }
+      const info = 'Backup de: ' + (payload._semana || '?') + '\n' +
+                   'Veículos: ' + (payload._nVeiculos || '?') + '\n' +
+                   'Gerado: ' + (payload._gerado ? new Date(payload._gerado).toLocaleString('pt-PT') : '?') + '\n\n' +
+                   'ATENÇÃO: isto vai SUBSTITUIR todos os dados atuais (local + cloud).\nQueres continuar?';
+      if (!confirm(info)) return;
+
+      // Restaurar para localStorage
+      Object.keys(payload.dados).forEach(function(k) {
+        ls(k, payload.dados[k]);
+      });
+
+      // Recarregar estado em memória
+      ALL_VEHICLES = ls(K_VEHICLES) || [];
+      mergeExtras();
+      edits = ls(K_EDITS) || {};
+      meta = ls(K_META) || meta;
+
+      // Sincronizar tudo de volta para o Supabase
+      const syncKeys = [K_VEHICLES, K_EDITS, K_META, K_HISTORY, K_OFICINAS, K_EXTRAS, K_REMOVED, K_REG, K_PLANO, K_VH];
+      Promise.all(syncKeys.map(function(k){
+        const v = ls(k);
+        return v !== null ? syncToSupabase(k, v) : Promise.resolve();
+      })).then(function(){
+        showSync('Backup restaurado e sincronizado ✓', '#22c55e');
+      });
+
+      const wb = document.getElementById('week-badge');
+      if (wb) wb.textContent = meta.week;
+      const cmb = document.getElementById('cmb-week-badge');
+      if (cmb) cmb.textContent = meta.week;
+      upBadge(); renderAll();
+      if (document.getElementById('page-plano')?.classList.contains('active')) renderPlano();
+      if (document.getElementById('page-registos')?.classList.contains('active')) renderRegistos();
+      if (document.getElementById('page-campo')?.classList.contains('active')) renderCampo();
+
+      alert('✅ Backup restaurado com sucesso!\n' + ALL_VEHICLES.length + ' veículos carregados.');
+    } catch(err) {
+      alert('⚠️ Erro ao ler backup: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ── EMPRESA FILE MODE ─────────────────────────────────────────────────────────
 let empRawData = [null, null]; // up to 2 files
 let empParsed  = null;
 
