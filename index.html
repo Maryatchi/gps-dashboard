@@ -1788,7 +1788,27 @@ function goToLoader() {
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 function norm(s) { return String(s||'').toUpperCase().replace(/-/g,'').replace(/\s/g,'').trim(); }
 function getWeekNum(d) { d=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())); d.setUTCDate(d.getUTCDate()+4-(d.getUTCDay()||7)); return Math.ceil((((d-new Date(Date.UTC(d.getUTCFullYear(),0,1)))/86400000)+1)/7); }
-function getEff(v,i) { const e=edits[i]; if(!e)return v; return{...v,obs:e.obs!==undefined?e.obs:v.obs,msgGPS:e.gps!==undefined?e.gps:v.msgGPS,msgPorta:e.porta!==undefined?e.porta:v.msgPorta,msgTemp:e.temp!==undefined?e.temp:v.msgTemp,notes:e.notes!==undefined?e.notes:v.notes||'',tipo:e.galera?e.galera:v.tipo}; }
+function getEff(v,i) {
+  const e=edits[i];
+  if(!e)return v;
+  const msgGPS  = e.gps!==undefined   ? e.gps   : v.msgGPS;
+  const msgPorta= e.porta!==undefined ? e.porta : v.msgPorta;
+  const msgTemp = e.temp!==undefined  ? e.temp  : v.msgTemp;
+  const obs     = e.obs!==undefined   ? e.obs   : v.obs;
+  // Derivar booleanos a partir das correções (para a % e gráficos ficarem coerentes com a lista)
+  // Regra: se a correção define a mensagem de problema, o booleano segue-a.
+  //   - mensagem vazia ('') após edição = problema resolvido → OK = true
+  //   - mensagem de problema ('REVER GPS', 'Instalar GPS', etc.) → OK = false
+  //   - obs 'Resolvido' força tudo OK
+  let gpsOK = v.gpsOK, portaOK = v.portaOK, tempOK = v.tempOK;
+  if (obs === 'Resolvido') { gpsOK = true; portaOK = true; tempOK = true; }
+  else {
+    if (e.gps!==undefined)   gpsOK   = (e.gps==='' || e.gps==='GPS OK');
+    if (e.porta!==undefined) portaOK = (e.porta==='' || e.porta==='Porta OK');
+    if (e.temp!==undefined)  tempOK  = (e.temp==='' || e.temp==='Temp OK');
+  }
+  return{...v,obs,msgGPS,msgPorta,msgTemp,gpsOK,portaOK,tempOK,notes:e.notes!==undefined?e.notes:v.notes||'',tipo:e.galera?e.galera:v.tipo};
+}
 // Regras de equipamento por tipo de galera:
 // Lona: sem sensor de porta nem temperatura
 // Iso: sem sensor de temperatura (tem porta)
