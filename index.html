@@ -688,7 +688,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     <input class="campo-search" id="campo-search" type="text" placeholder="🔍  Pesquisar matrícula..." oninput="renderCampo()">
     <div class="campo-filters">
       <button class="cfilt on" onclick="setCampoFilt(this,'problemas')">⚠️ Problemas</button>
-      <button class="cfilt" onclick="setCampoFilt(this,'gps')">📡 GPS</button>
+      <button class="cfilt" onclick="setCampoFilt(this,'rever_gps')">📡 REVER GPS</button>
+      <button class="cfilt" onclick="setCampoFilt(this,'instalar_gps')">🔴 Instalar GPS</button>
       <button class="cfilt" onclick="setCampoFilt(this,'porta')">🚪 Porta</button>
       <button class="cfilt" onclick="setCampoFilt(this,'temp')">🌡️ Temp</button>
       <button class="cfilt" onclick="setCampoFilt(this,'oficina')">🔧 Oficina</button>
@@ -3553,12 +3554,14 @@ function renderCampo() {
 
   // summary sempre sobre todos os problemas (sem filtro de search)
   const allProb = all.filter(v => !['Oficina','Sinistro'].includes(v.obs));
-  const nGPS  = allProb.filter(v => v.msgGPS).length;
+  const nInstalar = allProb.filter(v => v.msgGPS === 'Instalar GPS').length;
+  const nRever    = allProb.filter(v => v.msgGPS === 'REVER GPS').length;
   const nPorta= allProb.filter(v => hasPorta(v) && v.msgPorta === 'REVER S.Porta').length;
   const nTemp = allProb.filter(v => hasTemp(v)  && v.msgTemp  === 'REVER Temperaturas').length;
   const nOfic = all.filter(v => v.obs === 'Oficina').length;
   document.getElementById('campo-summary').innerHTML =
-    `<div class="csumm"><div class="csumm-n c-red">${nGPS}</div><div class="csumm-l">GPS</div></div>`+
+    `<div class="csumm"><div class="csumm-n c-red">${nInstalar}</div><div class="csumm-l">Instalar</div></div>`+
+    `<div class="csumm"><div class="csumm-n c-amber">${nRever}</div><div class="csumm-l">Rever GPS</div></div>`+
     `<div class="csumm"><div class="csumm-n c-amber">${nPorta}</div><div class="csumm-l">Porta</div></div>`+
     `<div class="csumm"><div class="csumm-n" style="color:#14b8a6">${nTemp}</div><div class="csumm-l">Temp</div></div>`+
     `<div class="csumm"><div class="csumm-n c-blue">${nOfic}</div><div class="csumm-l">Oficina</div></div>`;
@@ -3566,7 +3569,8 @@ function renderCampo() {
   // aplicar filtro principal
   let vs = all;
   if (campoFilt === 'problemas') vs = vs.filter(v => (v.msgGPS || (hasPorta(v) && v.msgPorta === 'REVER S.Porta') || (hasTemp(v) && v.msgTemp === 'REVER Temperaturas')) && !['Oficina','Sinistro'].includes(v.obs));
-  else if (campoFilt === 'gps')    vs = vs.filter(v => v.msgGPS && !['Oficina','Sinistro'].includes(v.obs));
+  else if (campoFilt === 'rever_gps')    vs = vs.filter(v => v.msgGPS === 'REVER GPS' && !['Oficina','Sinistro'].includes(v.obs));
+  else if (campoFilt === 'instalar_gps') vs = vs.filter(v => v.msgGPS === 'Instalar GPS' && !['Oficina','Sinistro'].includes(v.obs));
   else if (campoFilt === 'porta')  vs = vs.filter(v => hasPorta(v) && v.msgPorta === 'REVER S.Porta' && !['Oficina','Sinistro'].includes(v.obs));
   else if (campoFilt === 'temp')   vs = vs.filter(v => hasTemp(v) && v.msgTemp === 'REVER Temperaturas' && !['Oficina','Sinistro'].includes(v.obs));
   else if (campoFilt === 'oficina')vs = vs.filter(v => v.obs === 'Oficina' || v.obs === 'Sinistro');
