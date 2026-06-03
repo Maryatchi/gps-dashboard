@@ -242,6 +242,14 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   #page-campo{padding:.75rem}
   .campo-mobile-bar{display:flex !important}
 }
+
+/* ── MENUS DROPDOWN DA TOPBAR ── */
+.tb-menu{position:relative;display:inline-block}
+.tb-dropdown{display:none;position:absolute;top:calc(100% + 6px);right:0;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--rl);padding:6px;min-width:220px;box-shadow:0 8px 28px rgba(0,0,0,.45);z-index:40;flex-direction:column;gap:2px;animation:slideUp .15s ease}
+.tb-dropdown.open{display:flex}
+.tb-dropdown button{background:transparent;border:none;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;text-align:left;padding:9px 12px;border-radius:var(--r);cursor:pointer;white-space:nowrap;transition:background .12s}
+.tb-dropdown button:hover{background:var(--surface3)}
+.tb-dropdown-sep{height:1px;background:var(--border);margin:4px 2px}
 </style>
 </head>
 <body>
@@ -432,19 +440,35 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     </div>
     <div class="tb-right">
       <button class="btn-blue" onclick="saveWeek()">💾 Guardar semana</button>
+      <button class="btn-sm" onclick="forceSyncFromCloud()">🔄 Sincronizar</button>
       <button class="btn-amber" onclick="toggleOpPanel()">🔧 Oficinas</button>
       <button class="btn-sm" onclick="toggleUpdPanel()">📥 Atualizações</button>
-      <button class="btn-green" onclick="exportRelatorioTransportador()">📤 Relatório</button>
-      <button class="btn-sm" onclick="forceSyncFromCloud()">🔄 Sincronizar</button>
-      <button class="btn-sm" onclick="backupCompleto()" title="Descarregar cópia de segurança completa">💾 Backup</button>
-      <button class="btn-sm" onclick="document.getElementById('fi-restore').click()" title="Restaurar a partir de um backup">📥 Restaurar</button>
-      <input type="file" id="fi-restore" accept=".json" style="display:none" onchange="restaurarBackup(this.files[0])">
-      <button class="btn-green" onclick="openAddVehicleModal()">➕ Viatura</button>
-      <button class="btn-sm" onclick="goToLoader()">📂 Novos ficheiros</button>
+
+      <!-- Menu Exportar -->
+      <div class="tb-menu">
+        <button class="btn-green" onclick="toggleTbMenu(event,'menu-export')">📤 Exportar ▾</button>
+        <div class="tb-dropdown" id="menu-export">
+          <button onclick="exportRelatorioTransportador();closeTbMenus()">📤 Relatório por transportador</button>
+          <button onclick="exportExcel();closeTbMenus()">📊 Excel completo</button>
+          <button onclick="exportFormatoEmpresa();closeTbMenus()">🏢 Formato Empresa</button>
+          <button onclick="window.print();closeTbMenus()">🖨 Imprimir</button>
+          <div class="tb-dropdown-sep"></div>
+          <button onclick="backupCompleto();closeTbMenus()">💾 Backup completo</button>
+          <button onclick="document.getElementById('fi-restore').click();closeTbMenus()">📥 Restaurar backup</button>
+        </div>
+      </div>
+
+      <!-- Menu Mais -->
+      <div class="tb-menu">
+        <button class="btn-sm" onclick="toggleTbMenu(event,'menu-mais')">⋯</button>
+        <div class="tb-dropdown" id="menu-mais">
+          <button onclick="openAddVehicleModal();closeTbMenus()">➕ Adicionar viatura</button>
+          <button onclick="goToLoader();closeTbMenus()">📂 Carregar novos ficheiros</button>
+        </div>
+      </div>
+
       <button class="btn-sm" id="theme-toggle" onclick="toggleTheme()" title="Alternar tema claro/escuro">🌙</button>
-      <button class="btn-sm" onclick="window.print()">🖨 Imprimir</button>
-      <button class="btn-green" onclick="exportExcel()">📊 Excel</button>
-      <button class="btn-blue" onclick="exportFormatoEmpresa()" title="Exporta no mesmo formato do ficheiro semanal da empresa, com as tuas correções aplicadas">🏢 Formato Empresa</button>
+      <input type="file" id="fi-restore" accept=".json" style="display:none" onchange="restaurarBackup(this.files[0])">
     </div>
   </div>
 
@@ -1139,6 +1163,21 @@ async function saveWeekToSupabase(wn, yr) {
     showSync('Erro ao guardar', '#f59e0b');
   }
 }
+
+// ── MENUS DA TOPBAR ───────────────────────────────────────────────────────────
+function toggleTbMenu(e, id) {
+  e.stopPropagation();
+  const menu = document.getElementById(id);
+  const wasOpen = menu.classList.contains('open');
+  closeTbMenus();
+  if (!wasOpen) menu.classList.add('open');
+}
+function closeTbMenus() {
+  document.querySelectorAll('.tb-dropdown').forEach(m => m.classList.remove('open'));
+}
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.tb-menu')) closeTbMenus();
+});
 
 // ── TEMA CLARO / ESCURO ───────────────────────────────────────────────────────
 function applyTheme(theme) {
