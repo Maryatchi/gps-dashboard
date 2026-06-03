@@ -912,7 +912,32 @@ async function loadFromSupabase() {
       showSync('Sem '+w.week_num+' carregada', '#22c55e');
     }
     const r2 = await sb.from('fleet_state').select('key,value');
-    if (!r2.error && r2.data) r2.data.forEach(function(row) { if (row.value !== null) localStorage.setItem(row.key, JSON.stringify(row.value)); });
+    if (!r2.error && r2.data) r2.data.forEach(function(row) {
+      if (row.value === null) return;
+      // Registos: merge inteligente — preservar resolved:true local mesmo após sync
+      if (row.key === 'fleet_registos_v2') {
+        const localRegs = JSON.parse(localStorage.getItem('fleet_registos_v2') || 'null');
+        const cloudRegs = row.value;
+        if (localRegs && Array.isArray(localRegs) && Array.isArray(cloudRegs) && localRegs.length > 0) {
+          const resolvedMap = {};
+          localRegs.forEach(function(r) {
+            if (r.resolved) {
+              const k = (r.mat||'') + '|' + (r.problema||'') + '|' + (r.nota||'');
+              resolvedMap[k] = { resolved: true, resolvedDate: r.resolvedDate };
+            }
+          });
+          const merged = cloudRegs.map(function(r) {
+            const k = (r.mat||'') + '|' + (r.problema||'') + '|' + (r.nota||'');
+            return resolvedMap[k] ? Object.assign({}, r, resolvedMap[k]) : r;
+          });
+          localStorage.setItem(row.key, JSON.stringify(merged));
+        } else {
+          localStorage.setItem(row.key, JSON.stringify(row.value));
+        }
+      } else {
+        localStorage.setItem(row.key, JSON.stringify(row.value));
+      }
+    });
     showSync('Sincronizado', '#22c55e');
     return true;
   } catch(e) { console.warn('load error', e); showSync('Offline', '#f59e0b'); return false; }
@@ -2618,7 +2643,7 @@ function exportListaFiltrada() {
 // ── REGISTOS DE INTERVENÇÃO ───────────────────────────────────────────────────
 const K_REG = 'fleet_registos_v2';
 
-function getRegistos() { return ls(K_REG) || [{"mat": "L-202338", "problema": "Rever Temperaturas", "nota": "Troca de módulo"}, {"mat": "L-207127", "problema": "Rever sensor porta", "nota": "Sensor porta OK"}, {"mat": "L-197182", "problema": "Rever GPS", "nota": "Troca por unidade nova"}, {"mat": "P-108130", "problema": "Rever sensor porta", "nota": "Sensor porta OK"}, {"mat": "P-108125", "problema": "Rever sensor porta", "nota": "Sensor porta OK"}, {"mat": "L-206981", "problema": "Rever Temperaturas", "nota": "Precisa de ir a oficina atualizar firmware"}, {"mat": "P-108124", "problema": "Rever sensor porta", "nota": "Sensor porta OK"}, {"mat": "L-214403", "problema": "Rever sensor porta", "nota": "Sensor porta OK"}, {"mat": "AS-50-DS", "problema": "Retirar GPS", "nota": "GPS retirado"}, {"mat": "L-220640", "problema": "Rever Temperaturas", "nota": "Configuração termógrafo"}, {"mat": "L-220641", "problema": "Rever Temperaturas", "nota": "Configuração termógrafo"}, {"mat": "95-TX-70", "problema": "Rever GPS", "nota": "Correção da alimentação"}]; }
+function getRegistos() { return ls(K_REG) || []; }
 function saveRegistos(r) { ls(K_REG, r); syncToSupabase(K_REG, r); }
 
 function findTransp(mat) {
