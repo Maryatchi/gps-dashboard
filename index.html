@@ -1428,18 +1428,29 @@ function applyPosData() {
     if (!pd) return; // Sem dados de posição → não toca
 
     const lastSeenUpd = pd.lastSeen || v.lastSeen || '';
+    const obsAtual = (edits[i]?.obs !== undefined ? edits[i].obs : v.obs) || '';
+
+    // Não tocar em veículos em Oficina, Sinistro ou Removida
+    if (['Oficina','Sinistro','Removida'].includes(obsAtual)) {
+      ALL_VEHICLES[i] = { ...v, daysAgo: pd.days, lastSeen: lastSeenUpd };
+      return;
+    }
+
     if (pd.days <= 2) {
-      // 0-2 dias → GPS OK
+      // 0-2 dias → GPS OK — também limpar "Resolvido" se estava por GPS
       ALL_VEHICLES[i] = { ...v, gpsOK: true, msgGPS: '', daysAgo: pd.days, lastSeen: lastSeenUpd };
       if (edits[i]?.gps === 'REVER GPS') {
         edits[i] = { ...(edits[i]||{}), gps: '' };
       }
     } else {
-      // 3+ dias → REVER GPS (não tocar em Instalar GPS manual)
+      // 3+ dias → REVER GPS
+      // Se estava marcado como Resolvido, desmarcar — o problema voltou
       ALL_VEHICLES[i] = { ...v, daysAgo: pd.days, lastSeen: lastSeenUpd };
       if (edits[i]?.gps !== 'Instalar GPS') {
         ALL_VEHICLES[i] = { ...ALL_VEHICLES[i], gpsOK: false, msgGPS: 'REVER GPS' };
-        edits[i] = { ...(edits[i]||{}), gps: 'REVER GPS' };
+        const editUpd = { ...(edits[i]||{}), gps: 'REVER GPS' };
+        if (editUpd.obs === 'Resolvido') editUpd.obs = ''; // problema voltou → desmarcar resolvido
+        edits[i] = editUpd;
       }
     }
     updated++;
@@ -1967,8 +1978,13 @@ function getEff(v,i) {
   //   - mensagem de problema ('REVER GPS', 'Instalar GPS', etc.) → OK = false
   //   - obs 'Resolvido' força tudo OK
   let gpsOK = v.gpsOK, portaOK = v.portaOK, tempOK = v.tempOK;
-  if (obs === 'Resolvido') { gpsOK = true; portaOK = true; tempOK = true; }
-  else {
+  if (obs === 'Resolvido') {
+    // Resolvido só força OK se o veículo não tem REVER GPS activo por dias sem sinal
+    const temRevrGPS = (msgGPS === 'REVER GPS') && (v.daysAgo >= 3);
+    gpsOK   = temRevrGPS ? false : true;
+    portaOK = true;
+    tempOK  = true;
+  } else {
     if (e.gps!==undefined)   gpsOK   = (e.gps==='' || e.gps==='GPS OK');
     if (e.porta!==undefined) portaOK = (e.porta==='' || e.porta==='Porta OK');
     if (e.temp!==undefined)  tempOK  = (e.temp==='' || e.temp==='Temp OK');
@@ -2689,8 +2705,12 @@ function applyNotasData(rows, fname, stElId, resultElId, errElId) {
     const mn = norm(mat);
     const idx = ALL_VEHICLES.findIndex(v => norm(v.mat) === mn || norm(v.plate) === mn);
     if (idx >= 0) {
-      // Update vehicle notes
-      edits[idx] = { ...(edits[idx]||{}), notes: note + (prob ? ' · ' + prob : '') };
+      // Verificar se deve marcar como Removida
+      const probNorm = prob.toLowerCase();
+      const isRemovida = /saiu da frota|retirar gps/i.test(probNorm) || /saiu da frota|retirar gps/i.test(note.toLowerCase());
+      const editUpd = { ...(edits[idx]||{}), notes: note + (prob ? ' · ' + prob : '') };
+      if (isRemovida) editUpd.obs = 'Removida';
+      edits[idx] = editUpd;
       updated++;
 
       // Add to registos (avoid duplicates by mat+nota)
