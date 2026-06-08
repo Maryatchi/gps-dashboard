@@ -1294,17 +1294,31 @@ function showLoaderStatus(msg, color) {
   el.textContent = msg;
 }
 
+function parseLastSeen(s) {
+  // Suporta múltiplos formatos: dd/mm/yyyy hh:mm, yyyy-mm-dd hh:mm, dd-mm-yyyy
+  if (!s || s.length < 8) return null;
+  // formato dd/mm/yyyy (com ou sem hora)
+  const m1 = String(s).match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (m1) return new Date(parseInt(m1[3]), parseInt(m1[2])-1, parseInt(m1[1]));
+  // formato dd-mm-yyyy
+  const m2 = String(s).match(/^(\d{2})-(\d{2})-(\d{4})/);
+  if (m2) return new Date(parseInt(m2[3]), parseInt(m2[2])-1, parseInt(m2[1]));
+  // formato yyyy-mm-dd
+  const m3 = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m3) return new Date(parseInt(m3[1]), parseInt(m3[2])-1, parseInt(m3[3]));
+  return null;
+}
+
 function recalcDaysAgo() {
   // Recalcula daysAgo de todos os veículos a partir do lastSeen e da data de hoje
   // Garante que o valor nunca fica congelado no Supabase/localStorage
   const hoje = new Date(); hoje.setHours(0,0,0,0);
   ALL_VEHICLES.forEach((v, i) => {
-    if (v.lastSeen && v.lastSeen.length > 8) {
-      try {
-        const parts = v.lastSeen.replace(' ','T');
-        const dt = new Date(parts.length > 10 ? parts : parts + 'T00:00:00');
-        if (!isNaN(dt)) ALL_VEHICLES[i] = { ...v, daysAgo: Math.floor((hoje - dt) / 86400000) };
-      } catch(e) {}
+    if (!v.lastSeen) return;
+    const dt = parseLastSeen(v.lastSeen);
+    if (dt && !isNaN(dt)) {
+      dt.setHours(0,0,0,0);
+      ALL_VEHICLES[i] = { ...v, daysAgo: Math.floor((hoje - dt) / 86400000) };
     }
   });
 }
@@ -1394,12 +1408,11 @@ function applyPosData() {
   // Recalcular daysAgo de todos os veículos a partir do lastSeen (hoje como referência)
   const hoje = new Date(); hoje.setHours(0,0,0,0);
   ALL_VEHICLES.forEach((v, i) => {
-    if (v.lastSeen && v.lastSeen.length > 8) {
-      try {
-        const parts = v.lastSeen.replace(' ','T');
-        const dt = new Date(parts.length > 10 ? parts : parts + 'T00:00:00');
-        if (!isNaN(dt)) ALL_VEHICLES[i] = { ...ALL_VEHICLES[i], daysAgo: Math.floor((hoje - dt) / 86400000) };
-      } catch(e) {}
+    if (!v.lastSeen) return;
+    const dt = parseLastSeen(v.lastSeen);
+    if (dt && !isNaN(dt)) {
+      dt.setHours(0,0,0,0);
+      ALL_VEHICLES[i] = { ...ALL_VEHICLES[i], daysAgo: Math.floor((hoje - dt) / 86400000) };
     }
   });
 
@@ -4160,9 +4173,8 @@ function parseEmpresaFiles() {
     const v = allRows[mat];
     if (v.lastSeen && v.lastSeen.length > 8) {
       try {
-        const parts = v.lastSeen.replace(' ','T');
-        const dt = new Date(parts.length > 10 ? parts : parts + 'T00:00:00');
-        v.daysAgo = Math.floor((now - dt) / 86400000);
+        const dt = parseLastSeen(v.lastSeen);
+        if (dt && !isNaN(dt)) v.daysAgo = Math.floor((now - dt) / 86400000);
       } catch(e) {}
     }
   }
