@@ -479,6 +479,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     <button class="tab-btn" onclick="switchTab('plano',this)">🗓️ Planeamento</button>
     <button class="tab-btn" onclick="switchTab('campo',this)">📱 Campo</button>
     <button class="tab-btn" onclick="switchTab('gerar',this)">⚙️ Gerar Base JSON</button>
+    <button class="tab-btn" onclick="switchTab('kmsf',this)">🌡️ Kms & Frio</button>
   </div>
 
   <!-- PERFORMANCE -->
@@ -760,6 +761,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       </div>
     </div>
   </div>
+  <div class="tab-page" id="page-kmsf">
+    <div id="kmsf-root"></div>
+    <div id="kmsf-mobile" style="margin-top:24px"></div>
+  </div>
+
 </div><!-- end dashboard -->
 <div class="op-panel" id="op-panel">
   <div class="op-title">
@@ -1123,6 +1129,9 @@ async function loadFromSupabase() {
         localStorage.setItem(row.key, JSON.stringify(row.value));
       }
     });
+    // Carregar Kms & Frio
+    const kmsfRow = r2.data.find(r => r.key === K_KMSF);
+    if (kmsfRow && kmsfRow.value) { localStorage.setItem(K_KMSF, JSON.stringify(kmsfRow.value)); }
     showSync('Sincronizado', '#22c55e');
     return true;
   } catch(e) { console.warn('load error', e); showSync('Offline', '#f59e0b'); return false; }
@@ -1135,6 +1144,7 @@ async function forceSyncFromCloud() {
     mergeExtras();
     edits = ls(K_EDITS) || {};
     meta = ls(K_META) || meta;
+    recalcDaysAgo();
     const wb = document.getElementById('week-badge');
     if (wb) wb.textContent = meta.week;
     upBadge(); renderAll();
@@ -1258,6 +1268,7 @@ async function checkPrevSession() {
         mergeExtras();
         edits = ls(K_EDITS) || {};
         meta  = mAfter || meta;
+        recalcDaysAgo();
         setTimeout(() => openDashboard(), 800);
         return;
       } else {
@@ -1283,12 +1294,28 @@ function showLoaderStatus(msg, color) {
   el.textContent = msg;
 }
 
+function recalcDaysAgo() {
+  // Recalcula daysAgo de todos os veículos a partir do lastSeen e da data de hoje
+  // Garante que o valor nunca fica congelado no Supabase/localStorage
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  ALL_VEHICLES.forEach((v, i) => {
+    if (v.lastSeen && v.lastSeen.length > 8) {
+      try {
+        const parts = v.lastSeen.replace(' ','T');
+        const dt = new Date(parts.length > 10 ? parts : parts + 'T00:00:00');
+        if (!isNaN(dt)) ALL_VEHICLES[i] = { ...v, daysAgo: Math.floor((hoje - dt) / 86400000) };
+      } catch(e) {}
+    }
+  });
+}
+
 function resumeSession() {
   ALL_VEHICLES = ls(K_VEHICLES) || [];
   mergeExtras();
   edits = ls(K_EDITS) || {};
   meta  = ls(K_META)  || meta;
   if (!ALL_VEHICLES.length) { alert('Sessão inválida.'); return; }
+  recalcDaysAgo();
   applyPosData();
   openDashboard();
 }
@@ -1364,6 +1391,22 @@ function applyPortaData() {
 }
 function applyPosData() {
   if (!Object.keys(posData).length) return;
+  // Recalcular daysAgo de todos os veículos a partir do lastSeen (hoje como referência)
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  ALL_VEHICLES.forEach((v, i) => {
+    if (v.lastSeen && v.lastSeen.length > 8) {
+      try {
+        const parts = v.lastSeen.replace(' ','T');
+        const dt = new Date(parts.length > 10 ? parts : parts + 'T00:00:00');
+        if (!isNaN(dt)) ALL_VEHICLES[i] = { ...ALL_VEHICLES[i], daysAgo: Math.floor((hoje - dt) / 86400000) };
+      } catch(e) {}
+    }
+  });
+
+  // Threshold: usa o campo do separador Gerar se disponível, senão 7 dias
+  const threshEl = document.getElementById('gen-threshold');
+  const thresh = threshEl ? Math.max(1, parseInt(threshEl.value)||7) : 7;
+
   let updated = 0;
   ALL_VEHICLES.forEach((v, i) => {
     const mn = norm(v.mat), pn = norm(v.plate||'');
@@ -1376,15 +1419,17 @@ function applyPosData() {
       if (edits[i]?.gps === 'REVER GPS' || edits[i]?.gps === 'Instalar GPS') {
         edits[i] = { ...(edits[i]||{}), gps: '' };
       }
-    } else if (pd.days <= 7) {
-      // 2-7 dias → REVER GPS
-      ALL_VEHICLES[i] = { ...v, gpsOK: false, msgGPS: 'REVER GPS' };
-      edits[i] = { ...(edits[i]||{}), gps: 'REVER GPS' };
+    } else {
+      // 2+ dias (incluindo 8+) → REVER GPS
+      // Não tocar em veículos já marcados como "Instalar GPS" manualmente
+      if (edits[i]?.gps !== 'Instalar GPS') {
+        ALL_VEHICLES[i] = { ...v, gpsOK: false, msgGPS: 'REVER GPS' };
+        edits[i] = { ...(edits[i]||{}), gps: 'REVER GPS' };
+      }
     }
-    // 8+ dias → manter classificação do Supabase, não alterar
     updated++;
   });
-  console.log(`Posições aplicadas: ${updated} veículos`);
+  console.log(`Posições aplicadas: ${updated} veículos (threshold: ${thresh} dias)`);
 }
 
 // ── ARRANCAR VIA SUPABASE + FICHEIRO DE POSIÇÕES ──────────────────────────────
@@ -1908,7 +1953,7 @@ function upBadge() {
 
 function setRegion(btn,r) { currentRegion=r; document.querySelectorAll('.rfilt').forEach(b=>b.classList.remove('on')); btn.classList.add('on'); renderAll(); }
 function setVFilt(btn,f)  { currentVFilt=f;  document.querySelectorAll('.vfilt').forEach(b=>b.classList.remove('on')); btn.classList.add('on'); renderVehicles(); }
-function switchTab(id,btn) { document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); document.querySelectorAll('.tab-page').forEach(p=>p.classList.remove('active')); btn.classList.add('active'); document.getElementById('page-'+id).classList.add('active'); if(id==='trend')renderTrend(); if(id==='campo')renderCampo(); }
+function switchTab(id,btn) { document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); document.querySelectorAll('.tab-page').forEach(p=>p.classList.remove('active')); btn.classList.add('active'); document.getElementById('page-'+id).classList.add('active'); if(id==='trend')renderTrend(); if(id==='campo')renderCampo(); if(id==='kmsf'){renderKmsf();renderKmsfMobile();} }
 function renderAll() { renderKPIs(); renderSysBars(); renderFleetActions(); renderTransporters(); renderVehicles(); if(document.getElementById('page-campo')?.classList.contains('active'))renderCampo(); }
 
 // ── RENDERS ───────────────────────────────────────────────────────────────────
@@ -4187,5 +4232,389 @@ async function applyEmpresaFile() {
   }, 3000);
 }
 
+
+// ── KMS & FRIO ────────────────────────────────────────────────────────────────
+const K_KMSF = 'fleet_kmsf_v1';
+
+const KMSF_GALERAS = [
+  { mat:'AV58887', transp:'ZAS', tipo:'20', temHoras:true },
+  { mat:'AV58888', transp:'ZAS', tipo:'20', temHoras:true },
+  { mat:'AV58889', transp:'ZAS', tipo:'20', temHoras:true },
+  { mat:'AV58890', transp:'ZAS', tipo:'20', temHoras:true },
+  { mat:'AV58915', transp:'ZAS', tipo:'20', temHoras:true },
+  { mat:'L206883', transp:'ZAS', tipo:'27', temHoras:true },
+  { mat:'L206884', transp:'ZAS', tipo:'27', temHoras:true },
+  { mat:'L206981', transp:'TJA', tipo:'27', temHoras:true },
+  { mat:'L206982', transp:'TJA', tipo:'27', temHoras:true },
+  { mat:'L206983', transp:'TJA', tipo:'27', temHoras:true },
+  { mat:'L206984', transp:'TJA', tipo:'27', temHoras:true },
+  { mat:'L206996', transp:'ZAS', tipo:'33', temHoras:true },
+  { mat:'L206997', transp:'ZAS', tipo:'33', temHoras:true },
+  { mat:'L206998', transp:'ZAS', tipo:'33', temHoras:true },
+  { mat:'L207061', transp:'TJA', tipo:'27', temHoras:true },
+  { mat:'L207062', transp:'ZAS', tipo:'27', temHoras:true },
+  { mat:'L207063', transp:'ZAS', tipo:'27', temHoras:true },
+  { mat:'L207064', transp:'TJA', tipo:'27', temHoras:true },
+  { mat:'L207065', transp:'ZAS', tipo:'27', temHoras:true },
+  { mat:'L207066', transp:'ZAS', tipo:'27', temHoras:true },
+  { mat:'L207067', transp:'ZAS', tipo:'27', temHoras:true },
+  { mat:'L207068', transp:'ZAS', tipo:'27', temHoras:true },
+  { mat:'L207069', transp:'ZAS', tipo:'27', temHoras:true },
+  { mat:'L207072', transp:'ZAS', tipo:'27', temHoras:true },
+  { mat:'L207124', transp:'ZAS', tipo:'33 Isot\u00e9rmicas', temHoras:false },
+  { mat:'L207125', transp:'ZAS', tipo:'33 Isot\u00e9rmicas', temHoras:false },
+  { mat:'L207126', transp:'ZAS', tipo:'33 Isot\u00e9rmicas', temHoras:false },
+  { mat:'L207127', transp:'ZAS', tipo:'33 Isot\u00e9rmicas', temHoras:false },
+  { mat:'L207128', transp:'ZAS', tipo:'33 Isot\u00e9rmicas', temHoras:false },
+  { mat:'L207129', transp:'ZAS', tipo:'33 Isot\u00e9rmicas', temHoras:false },
+  { mat:'L207196', transp:'ZAS', tipo:'27', temHoras:true },
+  { mat:'L207197', transp:'ZAS', tipo:'27', temHoras:true },
+  { mat:'L207198', transp:'ZAS', tipo:'27', temHoras:true },
+];
+
+const MESES_PT = ['Janeiro','Fevereiro','Mar\u00e7o','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+let kmsfData = {}; // { 'YYYY-MM': { 'MAT': { kms, horas, nota } } }
+let kmsfMesAtual = (() => {
+  const d = new Date();
+  d.setMonth(d.getMonth() - 1); // mês anterior
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+})();
+
+function kmsfLoad() {
+  const raw = ls(K_KMSF);
+  kmsfData = raw || {};
+}
+
+async function kmsfSave() {
+  ls(K_KMSF, kmsfData);
+  await syncToSupabase(K_KMSF, kmsfData);
+}
+
+function kmsfMesLabel(ym) {
+  const [y, m] = ym.split('-');
+  return `${MESES_PT[parseInt(m)-1]} ${y}`;
+}
+
+function kmsfNavMes(delta) {
+  const [y, m] = kmsfMesAtual.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  kmsfMesAtual = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  kmsfMobileGaleraAtiva = null;
+  renderKmsf();
+  renderKmsfMobile();
+}
+
+function kmsfGetVal(mat, campo) {
+  const reg = (kmsfData[kmsfMesAtual] || {})[mat] || {};
+  return reg[campo] !== undefined ? reg[campo] : '';
+}
+
+function kmsfSetVal(mat, campo, val) {
+  if (!kmsfData[kmsfMesAtual]) kmsfData[kmsfMesAtual] = {};
+  if (!kmsfData[kmsfMesAtual][mat]) kmsfData[kmsfMesAtual][mat] = {};
+  kmsfData[kmsfMesAtual][mat][campo] = val;
+}
+
+function renderKmsf() {
+  kmsfLoad();
+  const root = document.getElementById('kmsf-root');
+  if (!root) return;
+
+  const mesLabel = kmsfMesLabel(kmsfMesAtual);
+  const registosMes = kmsfData[kmsfMesAtual] || {};
+  const preenchidas = Object.values(registosMes).filter(r => r.kms || r.horas || r.nota).length;
+
+  root.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+      <div>
+        <div style="font-size:18px;font-weight:700;color:var(--text)">🌡️ Kms &amp; Horas de Frio</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">Galeras JMR · Norte — ${KMSF_GALERAS.length} galeras</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button onclick="kmsfNavMes(-1)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 12px;cursor:pointer;font-size:14px">◀</button>
+        <div style="font-size:15px;font-weight:600;color:var(--blue);min-width:140px;text-align:center">${mesLabel}</div>
+        <button onclick="kmsfNavMes(1)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 12px;cursor:pointer;font-size:14px">▶</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span style="font-size:12px;color:var(--muted)">${preenchidas}/${KMSF_GALERAS.length} preenchidas</span>
+        <button onclick="kmsfGuardar()" style="background:#22c55e;border:none;border-radius:6px;color:#fff;font-weight:600;padding:8px 16px;cursor:pointer;font-size:13px">💾 Guardar</button>
+        <button onclick="kmsfExportExcel()" style="background:#3b82f6;border:none;border-radius:6px;color:#fff;font-weight:600;padding:8px 14px;cursor:pointer;font-size:13px">📊 Excel</button>
+      </div>
+    </div>
+
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="border-bottom:2px solid var(--border2)">
+            <th style="text-align:left;padding:8px 10px;color:var(--muted);font-weight:600;white-space:nowrap">Matr\u00edcula</th>
+            <th style="text-align:left;padding:8px 6px;color:var(--muted);font-weight:600">Transp.</th>
+            <th style="text-align:left;padding:8px 6px;color:var(--muted);font-weight:600">Tipo</th>
+            <th style="text-align:left;padding:8px 6px;color:var(--muted);font-weight:600">Kms</th>
+            <th style="text-align:left;padding:8px 6px;color:var(--muted);font-weight:600">H. Frio</th>
+            <th style="text-align:left;padding:8px 6px;color:var(--muted);font-weight:600">Nota</th>
+          </tr>
+        </thead>
+        <tbody id="kmsf-tbody">
+          ${KMSF_GALERAS.map(g => {
+            const reg = registosMes[g.mat] || {};
+            const temDados = reg.kms || reg.horas || reg.nota;
+            const rowStyle = temDados ? 'background:rgba(34,197,94,.04)' : '';
+            return `<tr style="border-bottom:1px solid var(--border);${rowStyle}">
+              <td style="padding:6px 10px;font-family:'DM Mono',monospace;font-size:12px;font-weight:600;color:var(--text);white-space:nowrap">${g.mat}</td>
+              <td style="padding:6px 6px;color:var(--muted);font-size:12px">${g.transp}</td>
+              <td style="padding:6px 6px;color:var(--muted);font-size:11px;white-space:nowrap">${g.tipo}</td>
+              <td style="padding:4px 6px">
+                <input type="text" value="${reg.kms||''}" placeholder="—"
+                  onchange="kmsfSetVal('${g.mat}','kms',this.value)"
+                  style="width:90px;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;padding:5px 7px;outline:none">
+              </td>
+              <td style="padding:4px 6px">
+                ${g.temHoras ? `<input type="text" value="${reg.horas||''}" placeholder="—"
+                  onchange="kmsfSetVal('${g.mat}','horas',this.value)"
+                  style="width:75px;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;padding:5px 7px;outline:none">` : `<span style="color:var(--hint);font-size:11px">—</span>`}
+              </td>
+              <td style="padding:4px 6px">
+                <input type="text" value="${(reg.nota||'').replace(/"/g,'&quot;')}" placeholder="Oficina, ACRV..."
+                  onchange="kmsfSetVal('${g.mat}','nota',this.value)"
+                  style="width:140px;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;color:var(--amber);font-size:12px;padding:5px 7px;outline:none">
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <div style="margin-top:20px;padding:14px;background:var(--surface);border-radius:8px;border:1px solid var(--border)">
+      <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:.04em">Meses com registo</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${Object.keys(kmsfData).sort().reverse().map(ym => {
+          const cnt = Object.values(kmsfData[ym]||{}).filter(r=>r.kms||r.horas||r.nota).length;
+          const ativo = ym === kmsfMesAtual;
+          return `<button onclick="kmsfMesAtual='${ym}';renderKmsf()"
+            style="padding:5px 12px;border-radius:20px;border:1px solid ${ativo?'#3b82f6':'var(--border2)'};background:${ativo?'rgba(59,130,246,.15)':'var(--surface2)'};color:${ativo?'#93c5fd':'var(--muted)'};font-size:12px;cursor:pointer">
+            ${kmsfMesLabel(ym)} <span style="color:var(--hint)">(${cnt})</span>
+          </button>`;
+        }).join('') || '<span style="color:var(--hint);font-size:12px">Ainda sem registos guardados.</span>'}
+      </div>
+    </div>
+  `;
+}
+
+async function kmsfGuardar() {
+  // Ler todos os inputs antes de guardar (caso não tenha disparado onchange)
+  document.querySelectorAll('#kmsf-tbody tr').forEach((tr, i) => {
+    const g = KMSF_GALERAS[i];
+    if (!g) return;
+    const inputs = tr.querySelectorAll('input');
+    if (inputs[0]) kmsfSetVal(g.mat, 'kms', inputs[0].value.trim());
+    if (g.temHoras && inputs[1]) kmsfSetVal(g.mat, 'horas', inputs[1].value.trim());
+    const notaInput = tr.querySelector('input:last-of-type');
+    if (notaInput) kmsfSetVal(g.mat, 'nota', notaInput.value.trim());
+  });
+  await kmsfSave();
+  showSync(`Kms & Frio ${kmsfMesLabel(kmsfMesAtual)} guardado`, '#22c55e');
+  renderKmsf();
+  renderKmsfMobile();
+}
+
+function kmsfExportExcel() {
+  if (typeof XLSX === 'undefined') { alert('Biblioteca Excel não disponível.'); return; }
+
+  const wb = XLSX.utils.book_new();
+  const meses = Object.keys(kmsfData).sort();
+
+  if (!meses.length) { alert('Sem dados para exportar.'); return; }
+
+  meses.forEach(ym => {
+    const [y, m] = ym.split('-');
+    const label = `${MESES_PT[parseInt(m)-1].substring(0,3)} ${y}`;
+    const rows = [['', 'Tipologia', 'Transportador', 'Kms', 'Horas de Frio', 'Nota']];
+    KMSF_GALERAS.forEach(g => {
+      const reg = (kmsfData[ym]||{})[g.mat] || {};
+      rows.push([g.mat, g.tipo, g.transp, reg.kms||'', g.temHoras?(reg.horas||''):'', reg.nota||'']);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{wch:12},{wch:18},{wch:10},{wch:10},{wch:12},{wch:16}];
+    XLSX.utils.book_append_sheet(wb, ws, label);
+  });
+
+  // Sheet resumo do mês actual
+  const reg = kmsfData[kmsfMesAtual] || {};
+  const resumo = [['Matr\u00edcula','Transportador','Tipologia','Kms','Horas de Frio','Nota']];
+  KMSF_GALERAS.forEach(g => {
+    const r = reg[g.mat] || {};
+    resumo.push([g.mat, g.transp, g.tipo, r.kms||'', g.temHoras?(r.horas||''):'', r.nota||'']);
+  });
+  const wsR = XLSX.utils.aoa_to_sheet(resumo);
+  wsR['!cols'] = [{wch:12},{wch:10},{wch:18},{wch:10},{wch:12},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, wsR, 'Envio_' + kmsfMesLabel(kmsfMesAtual).replace(' ','_'));
+
+  XLSX.writeFile(wb, `Galeras_JMR_Kms_Frio_${kmsfMesAtual}.xlsx`);
+}
+// ── FIM KMS & FRIO ────────────────────────────────────────────────────────────
+
 </script>
 </body></html>
+// ── KMS & FRIO · MOBILE ───────────────────────────────────────────────────────
+let kmsfMobileGaleraAtiva = null; // mat da galera aberta no formulário
+
+function renderKmsfMobile() {
+  const root = document.getElementById('kmsf-mobile');
+  if (!root) return;
+  kmsfLoad();
+  const reg = kmsfData[kmsfMesAtual] || {};
+
+  root.innerHTML = `
+    <div style="border-top:2px solid var(--border);padding-top:20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="font-size:15px;font-weight:700;color:var(--text)">📱 Registo Rápido</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">Otimizado para telemóvel · ${kmsfMesLabel(kmsfMesAtual)}</div>
+        </div>
+      </div>
+
+      <!-- Pesquisa -->
+      <div style="margin-bottom:14px">
+        <input type="text" id="kmsf-search" placeholder="🔍 Pesquisar matrícula..." oninput="kmsfMobileFilter()"
+          style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px;padding:10px 14px;outline:none">
+      </div>
+
+      <!-- Formulário galera activa -->
+      <div id="kmsf-form-wrap"></div>
+
+      <!-- Lista -->
+      <div id="kmsf-mobile-list">
+        ${renderKmsfMobileList(reg, '')}
+      </div>
+    </div>
+  `;
+
+  // Se havia galera activa, reoabrir
+  if (kmsfMobileGaleraAtiva) kmsfMobileAbrirForm(kmsfMobileGaleraAtiva);
+}
+
+function renderKmsfMobileList(reg, filtro) {
+  const f = filtro.trim().toLowerCase();
+  const galeras = f ? KMSF_GALERAS.filter(g => g.mat.toLowerCase().includes(f)) : KMSF_GALERAS;
+  if (!galeras.length) return '<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px">Nenhuma galera encontrada.</div>';
+
+  return galeras.map(g => {
+    const r = reg[g.mat] || {};
+    const feito = r.kms || r.horas || r.nota;
+    const dot = feito ? '#22c55e' : 'var(--border2)';
+    const kmsStr = r.kms ? `${r.kms} km` : '';
+    const horasStr = r.horas ? `${r.horas}h` : '';
+    const notaStr = r.nota ? r.nota : '';
+    const sub = [kmsStr, horasStr, notaStr].filter(Boolean).join(' · ') || (feito ? '' : 'Por preencher');
+    const ativa = kmsfMobileGaleraAtiva === g.mat;
+
+    return `<div onclick="kmsfMobileAbrirForm('${g.mat}')"
+      style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:8px;margin-bottom:6px;cursor:pointer;
+             background:${ativa ? 'rgba(59,130,246,.12)' : 'var(--surface)'};
+             border:1px solid ${ativa ? '#3b82f6' : 'var(--border)'};transition:all .15s">
+      <div style="width:10px;height:10px;border-radius:50%;background:${dot};flex-shrink:0"></div>
+      <div style="flex:1;min-width:0">
+        <div style="font-family:'DM Mono',monospace;font-size:13px;font-weight:600;color:var(--text)">${g.mat}</div>
+        <div style="font-size:11px;color:${feito ? '#86efac' : 'var(--hint)'};margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${sub}</div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);flex-shrink:0">${g.transp}</div>
+      <div style="font-size:18px;color:var(--muted)">›</div>
+    </div>`;
+  }).join('');
+}
+
+function kmsfMobileFilter() {
+  const f = (document.getElementById('kmsf-search')?.value || '').trim().toLowerCase();
+  const reg = kmsfData[kmsfMesAtual] || {};
+  const list = document.getElementById('kmsf-mobile-list');
+  if (list) list.innerHTML = renderKmsfMobileList(reg, f);
+  // Se só há uma galera no filtro, abrir logo
+  if (f) {
+    const match = KMSF_GALERAS.filter(g => g.mat.toLowerCase().includes(f));
+    if (match.length === 1) kmsfMobileAbrirForm(match[0].mat);
+  }
+}
+
+function kmsfMobileAbrirForm(mat) {
+  kmsfMobileGaleraAtiva = mat;
+  const g = KMSF_GALERAS.find(x => x.mat === mat);
+  if (!g) return;
+  const reg = (kmsfData[kmsfMesAtual] || {})[mat] || {};
+  const wrap = document.getElementById('kmsf-form-wrap');
+  if (!wrap) return;
+
+  wrap.innerHTML = `
+    <div style="background:var(--surface);border:1px solid #3b82f6;border-radius:10px;padding:16px;margin-bottom:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div>
+          <div style="font-family:'DM Mono',monospace;font-size:16px;font-weight:700;color:var(--text)">${mat}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${g.transp} · Tipo ${g.tipo}</div>
+        </div>
+        <button onclick="kmsfMobileFecharForm()" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--muted);padding:6px 10px;cursor:pointer;font-size:18px;line-height:1">✕</button>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em">Kms</div>
+          <input type="number" id="kmsf-m-kms" value="${reg.kms||''}" placeholder="Ex: 125430"
+            style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-family:'DM Mono',monospace;font-size:16px;padding:10px 12px;outline:none">
+        </div>
+        ${g.temHoras ? `<div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em">Horas de Frio</div>
+          <input type="number" id="kmsf-m-horas" value="${reg.horas||''}" placeholder="Ex: 3850"
+            style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-family:'DM Mono',monospace;font-size:16px;padding:10px 12px;outline:none">
+        </div>` : ''}
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em">Nota</div>
+          <input type="text" id="kmsf-m-nota" value="${(reg.nota||'').replace(/"/g,'&quot;')}" placeholder="Oficina, ACRV..."
+            style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--amber);font-size:14px;padding:10px 12px;outline:none">
+        </div>
+        <button onclick="kmsfMobileGuardar('${mat}')"
+          style="width:100%;background:#22c55e;border:none;border-radius:8px;color:#fff;font-weight:700;font-size:15px;padding:13px;cursor:pointer;margin-top:4px">
+          💾 Guardar
+        </button>
+      </div>
+    </div>
+  `;
+
+  // Scroll suave para o formulário
+  wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  // Actualizar lista para mostrar galera activa
+  const f = (document.getElementById('kmsf-search')?.value || '').trim().toLowerCase();
+  const reg2 = kmsfData[kmsfMesAtual] || {};
+  const list = document.getElementById('kmsf-mobile-list');
+  if (list) list.innerHTML = renderKmsfMobileList(reg2, f);
+}
+
+function kmsfMobileFecharForm() {
+  kmsfMobileGaleraAtiva = null;
+  const wrap = document.getElementById('kmsf-form-wrap');
+  if (wrap) wrap.innerHTML = '';
+  const f = (document.getElementById('kmsf-search')?.value || '').trim().toLowerCase();
+  const reg = kmsfData[kmsfMesAtual] || {};
+  const list = document.getElementById('kmsf-mobile-list');
+  if (list) list.innerHTML = renderKmsfMobileList(reg, f);
+}
+
+async function kmsfMobileGuardar(mat) {
+  const g = KMSF_GALERAS.find(x => x.mat === mat);
+  if (!g) return;
+  const kms  = document.getElementById('kmsf-m-kms')?.value.trim() || '';
+  const horas = g.temHoras ? (document.getElementById('kmsf-m-horas')?.value.trim() || '') : '';
+  const nota  = document.getElementById('kmsf-m-nota')?.value.trim() || '';
+
+  kmsfSetVal(mat, 'kms', kms);
+  if (g.temHoras) kmsfSetVal(mat, 'horas', horas);
+  kmsfSetVal(mat, 'nota', nota);
+
+  await kmsfSave();
+  showSync(`${mat} guardado`, '#22c55e');
+
+  // Fechar form e actualizar lista
+  kmsfMobileFecharForm();
+}
+// ── FIM KMS & FRIO · MOBILE ───────────────────────────────────────────────────
+
+
