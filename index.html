@@ -1700,14 +1700,18 @@ function loadPos(file) {
     try {
       const wb = XLSX.read(e.target.result, { type:'array', cellDates:true });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const raw = XLSX.utils.sheet_to_json(ws, { header:1, defval:null, blankrows:true, raw:false });
+      const raw = XLSX.utils.sheet_to_json(ws, { header:1, defval:null, blankrows:true });
 
       // Detetar linha de cabeçalho — aceita variantes com/sem acento, case insensitive
       // ── Detectar header e colunas ──────────────────────────────────────────
+      // Procurar linha onde "Veículo" aparece como célula isolada (não como parte de título)
       let hdrRow = -1;
       for (let i = 0; i < Math.min(raw.length, 15); i++) {
-        const joined = (raw[i]||[]).map(v => String(v||'')).join('|');
-        if (/ve[íi]culo/i.test(joined)) { hdrRow = i; break; }
+        const cells = (raw[i]||[]).map(v => String(v||'').trim());
+        // Header real tem "Veículo" como célula individual E tem "Data" ou "Hora" noutra célula
+        const temVeic = cells.some(c => /^ve[íi]culo$/i.test(c) || c === 'Vehicle');
+        const temData = cells.some(c => /^data$/i.test(c) || /^hora$/i.test(c));
+        if (temVeic && temData) { hdrRow = i; break; }
       }
       if (hdrRow < 0) hdrRow = 6; // fallback formato Inofleet
 
@@ -1715,11 +1719,11 @@ function loadPos(file) {
       let veicCol = -1, dataCol = -1, dtCol = -1;
       hdr.forEach((v,i) => {
         const s = String(v||'').trim();
-        if (/ve[íi]culo/i.test(s) || s === 'Vehicle') veicCol = i;
+        if (/^ve[íi]culo$/i.test(s) || s === 'Vehicle') veicCol = i;
         if (/^data$/i.test(s) || s === 'Date') dataCol = i;
         if (/^hora$/i.test(s) || s === 'Time') dtCol = i;
       });
-      // Fallbacks para formato Inofleet: col4=Veículo, col1=Data(dd-mm-yyyy), col3=Hora
+      // Fallbacks para formato Inofleet: col4=Veículo, col1=Data, col3=Hora
       if (veicCol < 0) veicCol = 4;
       if (dataCol < 0) dataCol = 1;
       if (dtCol < 0) dtCol = 3;
@@ -1739,6 +1743,13 @@ function loadPos(file) {
         const d = new Date(s);
         return isNaN(d) ? null : d;
       }
+
+      // DEBUG TEMPORÁRIO — remover após confirmar
+      console.log('=== DEBUG loadPos ===');
+      console.log('hdrRow:', hdrRow, 'veicCol:', veicCol, 'dataCol:', dataCol);
+      console.log('Header row:', JSON.stringify(raw[hdrRow]));
+      console.log('Linha hdrRow+2:', JSON.stringify(raw[hdrRow+2]));
+      console.log('Total raw rows:', raw.length);
 
       posData = {};
       const hoje = new Date();
@@ -1762,6 +1773,12 @@ function loadPos(file) {
         posData[norm(mat)] = { days, lastSeen };
         count++;
       }
+
+      // DEBUG — verificar L-188481
+      const dbgKey = Object.keys(posData).find(k => k.includes('L188481') || k.includes('188481'));
+      console.log('posData L188481:', dbgKey, posData[dbgKey]);
+      console.log('Total posData:', Object.keys(posData).length);
+      console.log('Amostra chaves:', Object.keys(posData).slice(0,5));
 
       const ok0 = Object.values(posData).filter(v=>v.days <= 1).length;
       const rev = Object.values(posData).filter(v=>v.days > 1).length;
