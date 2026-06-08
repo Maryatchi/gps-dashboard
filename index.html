@@ -871,7 +871,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     </div>
     <div class="modal-body">
       <div class="current-info" id="m-info"></div>
-      <div class="edit-section"><div class="edit-label">Observações / Estado</div><div class="edit-options" id="m-obs"><button class="eopt" data-val="" onclick="sel(this,'obs')">Nenhuma</button><button class="eopt" data-val="Oficina" onclick="sel(this,'obs')">🔧 Oficina</button><button class="eopt" data-val="Sinistro" onclick="sel(this,'obs')">⚠️ Sinistro</button><button class="eopt" data-val="Aguardar" onclick="sel(this,'obs')">⏳ Aguardar</button><button class="eopt" data-val="Resolvido" onclick="sel(this,'obs')">✅ Resolvido</button><button class="eopt" data-val="Removida" onclick="sel(this,'obs')">🗑 Removida</button></div></div>
+      <div class="edit-section"><div class="edit-label">Observações / Estado</div><div class="edit-options" id="m-obs"><button class="eopt" data-val="" onclick="sel(this,'obs')">Nenhuma</button><button class="eopt" data-val="Oficina" onclick="sel(this,'obs')">🔧 Oficina</button><button class="eopt" data-val="Sinistro" onclick="sel(this,'obs')">⚠️ Sinistro</button><button class="eopt" data-val="Aguardar" onclick="sel(this,'obs')">⏳ Aguardar</button><button class="eopt" id="m-obs-resolvido" data-val="Resolvido" onclick="sel(this,'obs')">✅ Resolvido</button><button class="eopt" data-val="Removida" onclick="sel(this,'obs')">🗑 Removida</button></div></div>
       <div class="edit-section"><div class="edit-label">GPS</div><div class="edit-options" id="m-gps"><button class="eopt" data-val="" onclick="sel(this,'gps')">Nenhuma</button><button class="eopt" data-val="Instalar GPS" onclick="sel(this,'gps')">Instalar GPS</button><button class="eopt" data-val="REVER GPS" onclick="sel(this,'gps')">REVER GPS</button><button class="eopt" data-val="GPS OK" onclick="sel(this,'gps')">GPS OK</button></div></div>
       <div class="edit-section"><div class="edit-label">Porta</div><div class="edit-options" id="m-porta"><button class="eopt" data-val="" onclick="sel(this,'porta')">Nenhuma</button><button class="eopt" data-val="REVER S.Porta" onclick="sel(this,'porta')">REVER S.Porta</button><button class="eopt" data-val="Porta OK" onclick="sel(this,'porta')">Porta OK</button></div></div>
       <div class="edit-section"><div class="edit-label">Temperatura</div><div class="edit-options" id="m-temp"><button class="eopt" data-val="" onclick="sel(this,'temp')">Nenhuma</button><button class="eopt" data-val="REVER Temperaturas" onclick="sel(this,'temp')">REVER Temperaturas</button><button class="eopt" data-val="Temp OK" onclick="sel(this,'temp')">Temp OK</button></div></div>
@@ -2196,6 +2196,14 @@ function openEdit(i) {
     '<div class="ci-row"><span class="ci-key">Temp</span><span class="ci-val">'+(v.msgTemp||'—')+'</span></div>'+
     rebStr+notesStr
   mSel={obs:v.obs||'',gps:v.msgGPS||'',porta:v.msgPorta||'',temp:v.msgTemp||'',galera:['Frio','Iso','Lona'].includes(v.tipo)?v.tipo:''};
+  // Esconder 'Resolvido' se veículo tem REVER GPS por dias sem sinal (daysAgo >= 3)
+  const btnResolvido = document.getElementById('m-obs-resolvido');
+  if (btnResolvido) {
+    const bloqueado = (v.daysAgo >= 3 && v.msgGPS === 'REVER GPS');
+    btnResolvido.style.display = bloqueado ? 'none' : '';
+    // Se estava marcado como Resolvido mas agora está bloqueado, limpar
+    if (bloqueado && mSel.obs === 'Resolvido') mSel.obs = '';
+  }
   hilite(); document.getElementById('m-notes').value=v.notes||'';
   document.getElementById('modal-overlay').classList.add('open');
 }
