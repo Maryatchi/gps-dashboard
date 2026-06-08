@@ -1311,15 +1311,14 @@ function parseLastSeen(s) {
 
 function recalcDaysAgo() {
   // Recalcula daysAgo de todos os veículos a partir do lastSeen e da data de hoje
-  // Garante que o valor nunca fica congelado no Supabase/localStorage
+  // Só actualiza os dias — o estado GPS é definido ao carregar o ficheiro de posições
   const hoje = new Date(); hoje.setHours(0,0,0,0);
   ALL_VEHICLES.forEach((v, i) => {
     if (!v.lastSeen) return;
     const dt = parseLastSeen(v.lastSeen);
-    if (dt && !isNaN(dt)) {
-      dt.setHours(0,0,0,0);
-      ALL_VEHICLES[i] = { ...v, daysAgo: Math.floor((hoje - dt) / 86400000) };
-    }
+    if (!dt || isNaN(dt)) return;
+    dt.setHours(0,0,0,0);
+    ALL_VEHICLES[i] = { ...v, daysAgo: Math.floor((hoje - dt) / 86400000) };
   });
 }
 
@@ -1427,15 +1426,14 @@ function applyPosData() {
     if (!pd) return; // Sem dados de posição → não toca
 
     const lastSeenUpd = pd.lastSeen || v.lastSeen || '';
-    if (pd.days <= 1) {
-      // Sinal OK (hoje/ontem) → marcar GPS ok
+    if (pd.days <= 2) {
+      // 0-2 dias → GPS OK
       ALL_VEHICLES[i] = { ...v, gpsOK: true, msgGPS: '', daysAgo: pd.days, lastSeen: lastSeenUpd };
-      if (edits[i]?.gps === 'REVER GPS' || edits[i]?.gps === 'Instalar GPS') {
+      if (edits[i]?.gps === 'REVER GPS') {
         edits[i] = { ...(edits[i]||{}), gps: '' };
       }
     } else {
-      // 2+ dias (incluindo 8+) → REVER GPS
-      // Não tocar em veículos já marcados como "Instalar GPS" manualmente
+      // 3+ dias → REVER GPS (não tocar em Instalar GPS manual)
       ALL_VEHICLES[i] = { ...v, daysAgo: pd.days, lastSeen: lastSeenUpd };
       if (edits[i]?.gps !== 'Instalar GPS') {
         ALL_VEHICLES[i] = { ...ALL_VEHICLES[i], gpsOK: false, msgGPS: 'REVER GPS' };
