@@ -1708,11 +1708,10 @@ function loadPos(file) {
         if (/^data$/i.test(s) || s === 'Date') dataCol = i;
         if (/^hora$/i.test(s) || s === 'Time') dtCol = i;
       });
-      // Fallbacks para formato Inofleet — SheetJS compacta col A (vazia), então:
-      // col B(Data)→0, col C(vazia)→1, col D(Hora)→2, col E(Veículo)→3
-      if (veicCol < 0) veicCol = 3;
-      if (dataCol < 0) dataCol = 0;
-      if (dtCol < 0) dtCol = 2;
+      // Fallbacks para formato Inofleet: col4=Veículo, col1=Data(dd-mm-yyyy), col3=Hora
+      if (veicCol < 0) veicCol = 4;
+      if (dataCol < 0) dataCol = 1;
+      if (dtCol < 0) dtCol = 3;
 
       // ── Função para parsear data no formato dd-mm-yyyy ou datetime ──────────
       function parseDataPos(v) {
