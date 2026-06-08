@@ -1413,17 +1413,19 @@ function applyPosData() {
     const pd = posData[mn] || posData[pn];
     if (!pd) return; // Sem dados de posição → não toca
 
+    const lastSeenUpd = pd.lastSeen || v.lastSeen || '';
     if (pd.days <= 1) {
       // Sinal OK (hoje/ontem) → marcar GPS ok
-      ALL_VEHICLES[i] = { ...v, gpsOK: true, msgGPS: '' };
+      ALL_VEHICLES[i] = { ...v, gpsOK: true, msgGPS: '', daysAgo: pd.days, lastSeen: lastSeenUpd };
       if (edits[i]?.gps === 'REVER GPS' || edits[i]?.gps === 'Instalar GPS') {
         edits[i] = { ...(edits[i]||{}), gps: '' };
       }
     } else {
       // 2+ dias (incluindo 8+) → REVER GPS
       // Não tocar em veículos já marcados como "Instalar GPS" manualmente
+      ALL_VEHICLES[i] = { ...v, daysAgo: pd.days, lastSeen: lastSeenUpd };
       if (edits[i]?.gps !== 'Instalar GPS') {
-        ALL_VEHICLES[i] = { ...v, gpsOK: false, msgGPS: 'REVER GPS' };
+        ALL_VEHICLES[i] = { ...ALL_VEHICLES[i], gpsOK: false, msgGPS: 'REVER GPS' };
         edits[i] = { ...(edits[i]||{}), gps: 'REVER GPS' };
       }
     }
@@ -1690,24 +1692,42 @@ function loadPos(file) {
       const raw = XLSX.utils.sheet_to_json(ws, { header:1, defval:null });
 
       // Detetar linha de cabeçalho — aceita variantes com/sem acento, case insensitive
+      // ── Detectar header e colunas ──────────────────────────────────────────
       let hdrRow = -1;
       for (let i = 0; i < Math.min(raw.length, 15); i++) {
         const joined = (raw[i]||[]).map(v => String(v||'')).join('|');
         if (/ve[íi]culo/i.test(joined)) { hdrRow = i; break; }
       }
-      // Fallback: linha 6 é o cabeçalho padrão do relatório Geotab
-      if (hdrRow < 0) hdrRow = 6;
+      if (hdrRow < 0) hdrRow = 6; // fallback formato Inofleet
 
       const hdr = raw[hdrRow] || [];
-      let veicCol = -1, dataCol = -1;
+      let veicCol = -1, dataCol = -1, dtCol = -1;
       hdr.forEach((v,i) => {
         const s = String(v||'').trim();
         if (/ve[íi]culo/i.test(s) || s === 'Vehicle') veicCol = i;
         if (/^data$/i.test(s) || s === 'Date') dataCol = i;
+        if (/^hora$/i.test(s) || s === 'Time') dtCol = i;
       });
-      // Fallback para posições conhecidas do formato Geotab
+      // Fallbacks para formato Inofleet: col4=Veículo, col1=Data(dd-mm-yyyy), col3=Hora(datetime)
       if (veicCol < 0) veicCol = 4;
       if (dataCol < 0) dataCol = 1;
+      if (dtCol < 0) dtCol = 3;
+
+      // ── Função para parsear data no formato dd-mm-yyyy ou datetime ──────────
+      function parseDataPos(v) {
+        if (!v) return null;
+        if (v instanceof Date) return v;
+        const s = String(v).trim();
+        // formato dd-mm-yyyy
+        const m1 = s.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+        if (m1) return new Date(parseInt(m1[3]), parseInt(m1[2])-1, parseInt(m1[1]));
+        // formato yyyy-mm-dd (ou datetime)
+        const m2 = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (m2) return new Date(parseInt(m2[1]), parseInt(m2[2])-1, parseInt(m2[3]));
+        // tentar Date normal
+        const d = new Date(s);
+        return isNaN(d) ? null : d;
+      }
 
       posData = {};
       const hoje = new Date();
@@ -1719,20 +1739,24 @@ function loadPos(file) {
         const mat = String(row[veicCol]||'').trim();
         if (!mat || mat === 'nan' || /^ve[íi]culo$/i.test(mat)) continue;
 
-        let days = 99;
-        if (row[dataCol]) {
-          let d = row[dataCol] instanceof Date ? row[dataCol] : new Date(row[dataCol]);
-          if (!isNaN(d)) { d.setHours(0,0,0,0); days = Math.round((hoje - d) / (1000*60*60*24)); }
+        // Tentar col de data; se falhar tentar col de hora (datetime completo)
+        let days = 9999;
+        const dv = parseDataPos(row[dataCol]) || parseDataPos(row[dtCol]);
+        if (dv && !isNaN(dv)) {
+          dv.setHours(0,0,0,0);
+          days = Math.round((hoje - dv) / (1000*60*60*24));
         }
-        posData[norm(mat)] = { days };
+        // Guardar também o lastSeen formatado
+        const lastSeen = dv ? dv.toISOString().slice(0,10) : '';
+        posData[norm(mat)] = { days, lastSeen };
         count++;
       }
 
       const ok0 = Object.values(posData).filter(v=>v.days <= 1).length;
-      const rev = Object.values(posData).filter(v=>v.days > 1 && v.days <= 7).length;
-      const old = Object.values(posData).filter(v=>v.days > 7).length;
+      const rev = Object.values(posData).filter(v=>v.days > 1).length;
+      const old2 = Object.values(posData).filter(v=>v.days > 7).length;
       setDzDone('dz-pos', 'dz-pos-name', file.name,
-        `${count} veículos · ✅ ${ok0} OK · ⚠️ ${rev} REVER · ❓ ${old} mant.`);
+        `${count} veículos · ✅ ${ok0} OK · ⚠️ ${rev} REVER GPS`);
       document.getElementById('lc2').classList.add('loaded');
 
       if (!ALL_VEHICLES.length) {
