@@ -1269,6 +1269,8 @@ async function checkPrevSession() {
         edits = ls(K_EDITS) || {};
         meta  = mAfter || meta;
         recalcDaysAgo();
+        applyPosData();
+        applyPortaData();
         setTimeout(() => openDashboard(), 800);
         return;
       } else {
@@ -1744,12 +1746,7 @@ function loadPos(file) {
         return isNaN(d) ? null : d;
       }
 
-      // DEBUG TEMPORÁRIO — remover após confirmar
-      console.log('=== DEBUG loadPos ===');
-      console.log('hdrRow:', hdrRow, 'veicCol:', veicCol, 'dataCol:', dataCol);
-      console.log('Header row:', JSON.stringify(raw[hdrRow]));
-      console.log('Linha hdrRow+2:', JSON.stringify(raw[hdrRow+2]));
-      console.log('Total raw rows:', raw.length);
+
 
       posData = {};
       const hoje = new Date();
@@ -1773,12 +1770,6 @@ function loadPos(file) {
         posData[norm(mat)] = { days, lastSeen };
         count++;
       }
-
-      // DEBUG — verificar L-188481
-      const dbgKey = Object.keys(posData).find(k => k.includes('L188481') || k.includes('188481'));
-      console.log('posData L188481:', dbgKey, posData[dbgKey]);
-      console.log('Total posData:', Object.keys(posData).length);
-      console.log('Amostra chaves:', Object.keys(posData).slice(0,5));
 
       const ok0 = Object.values(posData).filter(v=>v.days <= 1).length;
       const rev = Object.values(posData).filter(v=>v.days > 1).length;
