@@ -1350,13 +1350,31 @@ function loadPortas(file) {
 
       portaData = new Set();
 
-      // Estratégia 1: procurar padrão "Matricula:XXXX" em qualquer célula
-      const plateRe = /[Mm]atricula[:\s]+([A-Z0-9\-]+)/;
+      // Estratégia 1a: linha tem "Matricula:" numa célula e a matrícula noutra (formato Geotab XLS)
+      // Estrutura: col1="Matricula:", col10="XX-XX-XX - S.Porta", col23="Veículo:", col27="XX-XX-XX"
       for (const row of raw) {
-        for (const cell of (row||[])) {
-          const s = String(cell||'');
-          const m = s.match(plateRe);
-          if (m) portaData.add(norm(m[1]));
+        if (!row) continue;
+        const cells = row.map(v => String(v||'').trim());
+        const matIdx = cells.findIndex(c => c === 'Matricula:');
+        if (matIdx >= 0) {
+          // Tentar col27 (campo Veículo:) ou extrair da célula após "Matricula:"
+          const veicIdx = cells.findIndex(c => c === 'Veículo:');
+          let mat = '';
+          if (veicIdx >= 0 && cells[veicIdx+1]) mat = cells[veicIdx+1];
+          else if (cells[matIdx+1]) mat = cells[matIdx+1].split(' - ')[0];
+          if (mat && mat.length > 2) portaData.add(norm(mat));
+        }
+      }
+
+      // Estratégia 1b: procurar padrão "Matricula:XXXX" em qualquer célula (formato antigo)
+      if (!portaData.size) {
+        const plateRe = /[Mm]atricula[:\s]+([A-Z0-9\-]+)/;
+        for (const row of raw) {
+          for (const cell of (row||[])) {
+            const s = String(cell||'');
+            const m = s.match(plateRe);
+            if (m) portaData.add(norm(m[1]));
+          }
         }
       }
 
@@ -2021,8 +2039,8 @@ function renderKPIs() {
   document.getElementById('k-total').textContent=t;
   document.getElementById('k-oficina').textContent=d.filter(v=>v.obs==='Oficina').length;
   document.getElementById('k-sinistro').textContent=d.filter(v=>v.obs==='Sinistro').length;
-  document.getElementById('k-install').textContent=d.filter(v=>v.msgGPS==='Instalar GPS'&&!['Oficina','Sinistro'].includes(v.obs)).length;
-  document.getElementById('k-rgps').textContent=d.filter(v=>v.msgGPS==='REVER GPS'&&!['Oficina','Sinistro'].includes(v.obs)).length;
+  document.getElementById('k-install').textContent=d.filter(v=>v.msgGPS==='Instalar GPS'&&!['Oficina','Sinistro','Removida'].includes(v.obs)).length;
+  document.getElementById('k-rgps').textContent=d.filter(v=>v.msgGPS==='REVER GPS'&&!['Oficina','Sinistro','Removida'].includes(v.obs)).length;
   document.getElementById('k-porta').textContent=d.filter(v=>hasPorta(v)&&v.msgPorta==='REVER S.Porta').length;
   document.getElementById('k-temp').textContent=d.filter(v=>hasTemp(v)&&v.msgTemp==='REVER Temperaturas').length;
   const dAtivo=d.filter(isAtivo); const gok=dAtivo.filter(v=>v.gpsOK).length; const tAtivo=dAtivo.length||1;
@@ -2049,8 +2067,8 @@ function renderSysBars() {
 function renderFleetActions() {
   const d=getFilt();
   const items=[
-    {col:'#ef4444',title:'Instalar GPS',sub:'Sem unidade instalada',count:d.filter(v=>v.msgGPS==='Instalar GPS'&&!['Oficina','Sinistro'].includes(v.obs)).length,cls:'c-red',filter:'instalar'},
-    {col:'#ef4444',title:'REVER GPS',sub:'GPS não comunica',count:d.filter(v=>v.msgGPS==='REVER GPS'&&!['Oficina','Sinistro'].includes(v.obs)).length,cls:'c-red',filter:'rever_gps'},
+    {col:'#ef4444',title:'Instalar GPS',sub:'Sem unidade instalada',count:d.filter(v=>v.msgGPS==='Instalar GPS'&&!['Oficina','Sinistro','Removida'].includes(v.obs)).length,cls:'c-red',filter:'instalar'},
+    {col:'#ef4444',title:'REVER GPS',sub:'GPS não comunica',count:d.filter(v=>v.msgGPS==='REVER GPS'&&!['Oficina','Sinistro','Removida'].includes(v.obs)).length,cls:'c-red',filter:'rever_gps'},
     {col:'#f59e0b',title:'REVER Porta',sub:'Sensor de porta',count:d.filter(v=>hasPorta(v)&&v.msgPorta==='REVER S.Porta').length,cls:'c-amber',filter:'porta'},
     {col:'#f59e0b',title:'REVER Temperatura',sub:'Sensor de temperatura',count:d.filter(v=>hasTemp(v)&&v.msgTemp==='REVER Temperaturas').length,cls:'c-amber',filter:'temp'},
     {col:'#f59e0b',title:'REVER Bateria',sub:'Tensão baixa',count:d.filter(v=>v.msgVolt==='REVER Bateria').length,cls:'c-amber',filter:'bateria'},
@@ -2140,7 +2158,7 @@ function renderVehicles() {
     return regMatch(v)&&(tFilt==='all'||v.transp===tFilt);
   });
   const f=currentVFilt;
-  const noOficina = i => !['Oficina','Sinistro'].includes(getEff(ALL_VEHICLES[i],i).obs);
+  const noOficina = i => !['Oficina','Sinistro','Removida'].includes(getEff(ALL_VEHICLES[i],i).obs);
   if(f==='todos_gps') idx=idx.filter(i=>!!getEff(ALL_VEHICLES[i],i).msgGPS&&noOficina(i));
   else if(f==='instalar') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgGPS==='Instalar GPS'&&noOficina(i));
   else if(f==='rever_gps') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgGPS==='REVER GPS'&&noOficina(i));
@@ -3141,7 +3159,7 @@ function exportListaFiltrada() {
     const v=getEff(ALL_VEHICLES[i],i);
     return regMatch(v)&&!['Removida','Oficina','Sinistro'].includes(v.obs)&&(tFilt==='all'||v.transp===tFilt);
   });
-  const noOficina = i => !['Oficina','Sinistro'].includes(getEff(ALL_VEHICLES[i],i).obs);
+  const noOficina = i => !['Oficina','Sinistro','Removida'].includes(getEff(ALL_VEHICLES[i],i).obs);
   if(f==='todos_gps') idx=idx.filter(i=>!!getEff(ALL_VEHICLES[i],i).msgGPS&&noOficina(i));
   else if(f==='instalar') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgGPS==='Instalar GPS'&&noOficina(i));
   else if(f==='rever_gps') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgGPS==='REVER GPS'&&noOficina(i));
