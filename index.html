@@ -200,7 +200,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .chg-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px}
 .chg-row:last-child{border-bottom:none}.chg-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 @media(max-width:800px){.two-col,.chart-grid{grid-template-columns:1fr}.load-grid{grid-template-columns:1fr}.vrow{grid-template-columns:100px 80px 1fr 28px}.vrow>:nth-child(3),.vrow>:nth-child(4){display:none}}
-@media print{.topbar,.tab-bar,.region-bar,.filter-row,.btn-sm,.btn-green,.btn-amber,.btn-blue,.sinput,.modal-overlay,.op-panel,.chg-box{display:none!important}body{background:white;color:black}.card{border:1px solid #ddd}}
+@media print{.topbar,.tab-bar,.region-bar,.filter-row,.btn-sm,.btn-green,.btn-amber,.btn-blue,.sinput,.modal-overlay,.op-panel,.chg-box,.mobile-tabs{display:none!important}body{background:white;color:black}.card{border:1px solid #ddd}}
 
 /* ── VISTA CAMPO (mobile) ── */
 #page-campo{padding:.75rem;max-width:600px}
@@ -239,9 +239,22 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 @media(max-width:600px){
   .tab-bar{display:none}
   .topbar{display:none}
-  #page-campo{padding:.75rem}
+  #page-campo{padding:.75rem;padding-bottom:60px}
+  #page-kmsf{padding:.75rem;padding-bottom:60px}
   .campo-mobile-bar{display:flex !important}
+  .kmsf-mobile-bar{display:flex !important}
+  .mobile-tabs.visible{display:flex}
+  #kmsf-root{display:none}
+  #kmsf-mobile{margin-top:0 !important}
 }
+
+/* ── MOBILE BOTTOM TAB BAR ── */
+.mobile-tabs{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border2);z-index:25;flex-direction:row}
+.mtab{flex:1;padding:12px 0 max(10px,env(safe-area-inset-bottom));border:none;background:transparent;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;text-align:center;-webkit-tap-highlight-color:transparent;transition:color .15s;border-top:2px solid transparent}
+.mtab.active{color:var(--blue);border-top-color:var(--blue)}
+
+/* ── KMSF MOBILE BAR ── */
+.kmsf-mobile-bar{display:none;align-items:center;justify-content:space-between;padding:.75rem .75rem .5rem;gap:8px;position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--border);margin:-.75rem -.75rem .75rem}
 
 /* ── MENUS DROPDOWN DA TOPBAR ── */
 .tb-menu{position:relative;display:inline-block}
@@ -751,6 +764,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
             </div>
           </div>
           <button id="gen-btn" onclick="generateBaseJSON()" disabled style="background:var(--blue);border:none;border-radius:var(--r);color:white;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;padding:11px 24px;cursor:pointer;opacity:.35;white-space:nowrap;transition:opacity .2s">⚡ Gerar &amp; Guardar na Cloud ☁️</button>
+          <button onclick="generateFromCurrent()" style="background:var(--green-dim);border:1px solid rgba(34,197,94,.3);border-radius:var(--r);color:#86efac;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;padding:11px 24px;cursor:pointer;white-space:nowrap;transition:opacity .2s">📊 Guardar estado atual na Cloud ☁️</button>
         </div>
       </div>
       <div id="gen-result" style="display:none;margin-top:1rem"></div>
@@ -762,11 +776,28 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     </div>
   </div>
   <div class="tab-page" id="page-kmsf">
+    <!-- barra mobile: só visível em ecrã pequeno via CSS -->
+    <div class="kmsf-mobile-bar">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:14px;font-weight:700;letter-spacing:-.3px">🌡️ Kms & Frio</span>
+        <span class="cmb-week" id="kmsf-week-badge">—</span>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="cmb-btn cmb-sync" onclick="forceSyncFromCloud()">🔄 Sync</button>
+      </div>
+    </div>
     <div id="kmsf-root"></div>
     <div id="kmsf-mobile" style="margin-top:24px"></div>
   </div>
 
 </div><!-- end dashboard -->
+
+<!-- MOBILE BOTTOM TAB BAR -->
+<div class="mobile-tabs" id="mobile-tabs">
+  <button class="mtab active" onclick="switchMobileTab('campo',this)">📱 Campo</button>
+  <button class="mtab" onclick="switchMobileTab('kmsf',this)">🌡️ Kms & Frio</button>
+</div>
+
 <div class="op-panel" id="op-panel">
   <div class="op-title">
     <span>🔧 Atualizar Oficinas</span>
@@ -1931,13 +1962,19 @@ function migrateGaleraFromNotes() {
 function openDashboard() {
   document.getElementById('loader').style.display = 'none';
   document.getElementById('dashboard').style.display = 'block';
+  const mt = document.getElementById('mobile-tabs'); if (mt) mt.classList.add('visible');
   applyTheme(localStorage.getItem('fleet_theme') || 'dark');
   sincronizarSemanaAtual();
-  document.getElementById('week-badge').textContent = meta.week; const cmb=document.getElementById('cmb-week-badge'); if(cmb) cmb.textContent=meta.week;
+  document.getElementById('week-badge').textContent = meta.week; const cmb=document.getElementById('cmb-week-badge'); if(cmb) cmb.textContent=meta.week; const kmsfwb=document.getElementById('kmsf-week-badge'); if(kmsfwb) kmsfwb.textContent=meta.week;
   edits = ls(K_EDITS) || edits;
   migrateGaleraFromNotes();
   upBadge();
   renderAll();
+  // No telemóvel, abrir directamente no Campo
+  if (window.innerWidth <= 600) {
+    const campoBtn = document.querySelector('.mtab');
+    if (campoBtn) switchMobileTab('campo', campoBtn);
+  }
 }
 
 // ── GESTÃO AUTOMÁTICA DA SEMANA ───────────────────────────────────────────────
@@ -1979,6 +2016,7 @@ function editarSemana() {
 
 function goToLoader() {
   document.getElementById('dashboard').style.display = 'none';
+  const mt = document.getElementById('mobile-tabs'); if (mt) mt.classList.remove('visible');
   document.getElementById('loader').style.display = 'flex';
   checkPrevSession();
 }
@@ -2034,6 +2072,15 @@ function upBadge() {
 function setRegion(btn,r) { currentRegion=r; document.querySelectorAll('.rfilt').forEach(b=>b.classList.remove('on')); btn.classList.add('on'); renderAll(); }
 function setVFilt(btn,f)  { currentVFilt=f;  document.querySelectorAll('.vfilt').forEach(b=>b.classList.remove('on')); btn.classList.add('on'); renderVehicles(); }
 function switchTab(id,btn) { document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); document.querySelectorAll('.tab-page').forEach(p=>p.classList.remove('active')); btn.classList.add('active'); document.getElementById('page-'+id).classList.add('active'); if(id==='trend')renderTrend(); if(id==='campo')renderCampo(); if(id==='kmsf'){renderKmsf();renderKmsfMobile();} }
+function switchMobileTab(id, btn) {
+  document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.mtab').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  if (btn) btn.classList.add('active');
+  if (id === 'campo') renderCampo();
+  if (id === 'kmsf') { renderKmsf(); renderKmsfMobile(); }
+}
 function renderAll() { renderKPIs(); renderSysBars(); renderFleetActions(); renderTransporters(); renderVehicles(); if(document.getElementById('page-campo')?.classList.contains('active'))renderCampo(); }
 
 // ── RENDERS ───────────────────────────────────────────────────────────────────
@@ -3148,8 +3195,51 @@ function generateBaseJSON() {
   saveWeekToSupabase(weekNum, year);
 }
 
+async function generateFromCurrent() {
+  const weekNum = parseInt(document.getElementById('gen-week').value) || meta.weekNum || getWeekNum(new Date());
+  const year = parseInt(document.getElementById('gen-year').value) || new Date().getFullYear();
 
-// (dados carregados do Supabase automaticamente)
+  // Snapshot do estado atual com edits aplicados
+  const d = ALL_VEHICLES.map((v,i) => getEff(v,i)).filter(v => v.obs !== 'Removida');
+  const total = d.filter(v => regMatch(v)).length;
+  const gpsOK = d.filter(v => v.gpsOK && regMatch(v) && !['Oficina','Sinistro'].includes(v.obs)).length;
+  const inst = d.filter(v => v.msgGPS === 'Instalar GPS' && regMatch(v) && !['Oficina','Sinistro'].includes(v.obs)).length;
+  const rgps = d.filter(v => v.msgGPS === 'REVER GPS' && regMatch(v) && !['Oficina','Sinistro'].includes(v.obs)).length;
+  const portaOK = d.filter(v => v.portaOK && regMatch(v)).length;
+  const rPorta = d.filter(v => v.msgPorta === 'REVER S.Porta' && regMatch(v)).length;
+  const rTemp = d.filter(v => v.msgTemp === 'REVER Temperaturas' && regMatch(v)).length;
+  const totalAtivo = d.filter(v => regMatch(v) && !['Oficina','Sinistro'].includes(v.obs)).length || 1;
+  const gpsP = Math.round(gpsOK / totalAtivo * 100);
+
+  // Atualizar meta
+  const today = new Date().toLocaleDateString('pt-PT');
+  meta = { week: `Sem ${weekNum} · ${year}`, date: today, weekNum, year };
+  document.getElementById('week-badge').textContent = meta.week;
+  const cmb2 = document.getElementById('cmb-week-badge'); if (cmb2) cmb2.textContent = meta.week;
+  const kmsfwb2 = document.getElementById('kmsf-week-badge'); if (kmsfwb2) kmsfwb2.textContent = meta.week;
+  ls(K_VEHICLES, ALL_VEHICLES);
+  ls(K_META, meta);
+
+  // Guardar na Cloud
+  await saveWeekToSupabase(weekNum, year);
+
+  // Mostrar resultado
+  document.getElementById('gen-result').innerHTML = `
+    <div style="background:var(--green-dim);border:1px solid rgba(34,197,94,.25);border-radius:var(--rl);padding:1.25rem;font-size:13px;line-height:1.9;color:#86efac">
+      ✅ <strong>Estado atual guardado — Semana ${weekNum} · ${year}</strong><br>
+      <span style="color:var(--text)">
+        📍 GPS OK: <strong>${gpsOK}</strong> (${gpsP}%) &nbsp;·&nbsp;
+        🟡 REVER GPS: <strong>${rgps}</strong> &nbsp;·&nbsp;
+        🔴 Instalar GPS: <strong>${inst}</strong><br>
+        🚪 Porta OK: <strong>${portaOK}</strong> &nbsp;·&nbsp;
+        🟡 REVER Porta: <strong>${rPorta}</strong> &nbsp;·&nbsp;
+        🌡️ REVER Temp: <strong>${rTemp}</strong><br>
+        📋 Total: <strong>${total}</strong> veículos
+      </span>
+    </div>`;
+  document.getElementById('gen-result').style.display = 'block';
+  document.getElementById('gen-compare').style.display = 'none';
+}
 
 
 // ── EXPORTAR LISTA FILTRADA ───────────────────────────────────────────────────
