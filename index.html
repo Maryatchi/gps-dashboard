@@ -1332,6 +1332,7 @@ function resumeSession() {
   if (!ALL_VEHICLES.length) { alert('Sessão inválida.'); return; }
   recalcDaysAgo();
   applyPosData();
+  ls(K_VEHICLES, ALL_VEHICLES); ls(K_EDITS, edits);
   openDashboard();
 }
 
@@ -1439,7 +1440,7 @@ function applyPosData() {
   const threshEl = document.getElementById('gen-threshold');
   const thresh = threshEl ? Math.max(1, parseInt(threshEl.value)||7) : 7;
 
-  let updated = 0;
+  let updated = 0, cleaned = 0;
   ALL_VEHICLES.forEach((v, i) => {
     const mn = norm(v.mat), pn = norm(v.plate||'');
     const pd = posData[mn] || posData[pn];
@@ -1455,10 +1456,12 @@ function applyPosData() {
     }
 
     if (pd.days <= 2) {
-      // 0-2 dias → GPS OK — também limpar "Resolvido" se estava por GPS
+      // 0-2 dias → GPS OK — limpar qualquer edição GPS negativa
       ALL_VEHICLES[i] = { ...v, gpsOK: true, msgGPS: '', daysAgo: pd.days, lastSeen: lastSeenUpd };
-      if (edits[i]?.gps === 'REVER GPS') {
+      if (edits[i]?.gps && edits[i].gps !== 'GPS OK' && edits[i].gps !== '') {
+        console.log(`[posData] GPS OK → limpou edit "${edits[i].gps}" de ${v.mat}`);
         edits[i] = { ...(edits[i]||{}), gps: '' };
+        cleaned++;
       }
     } else {
       // 3+ dias → REVER GPS
@@ -1473,7 +1476,7 @@ function applyPosData() {
     }
     updated++;
   });
-  console.log(`Posições aplicadas: ${updated} veículos (threshold: ${thresh} dias)`);
+  console.log(`Posições aplicadas: ${updated} veículos · ${cleaned} edições GPS limpas (threshold: ${thresh} dias)`);
 }
 
 // ── ARRANCAR VIA SUPABASE + FICHEIRO DE POSIÇÕES ──────────────────────────────
