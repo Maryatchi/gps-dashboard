@@ -765,6 +765,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
           </div>
           <button id="gen-btn" onclick="generateBaseJSON()" disabled style="background:var(--blue);border:none;border-radius:var(--r);color:white;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;padding:11px 24px;cursor:pointer;opacity:.35;white-space:nowrap;transition:opacity .2s">⚡ Gerar &amp; Guardar na Cloud ☁️</button>
           <button onclick="generateFromCurrent()" style="background:var(--green-dim);border:1px solid rgba(34,197,94,.3);border-radius:var(--r);color:#86efac;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;padding:11px 24px;cursor:pointer;white-space:nowrap;transition:opacity .2s">📊 Guardar estado atual na Cloud ☁️</button>
+          <button onclick="exportFormatoEmpresa()" style="background:var(--amber-dim);border:1px solid rgba(245,158,11,.3);border-radius:var(--r);color:#fcd34d;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;padding:11px 24px;cursor:pointer;white-space:nowrap">📥 Descarregar Base JSON (Excel)</button>
         </div>
       </div>
       <div id="gen-result" style="display:none;margin-top:1rem"></div>
@@ -3236,6 +3237,9 @@ async function generateFromCurrent() {
         🌡️ REVER Temp: <strong>${rTemp}</strong><br>
         📋 Total: <strong>${total}</strong> veículos
       </span>
+      <div style="margin-top:10px">
+        <button onclick="exportFormatoEmpresa()" style="background:var(--amber);border:none;border-radius:6px;color:var(--bg);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;padding:9px 18px;cursor:pointer">📥 Descarregar Base JSON (Excel)</button>
+      </div>
     </div>`;
   document.getElementById('gen-result').style.display = 'block';
   document.getElementById('gen-compare').style.display = 'none';
