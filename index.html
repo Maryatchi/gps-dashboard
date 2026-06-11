@@ -1091,8 +1091,26 @@ async function loadFromSupabase() {
       const w = r1.data[0];
       const nm = {week:'Sem '+w.week_num+' · '+w.year, date:w.date, weekNum:w.week_num, year:w.year};
       const lm = JSON.parse(localStorage.getItem('fleet_meta_v2')||'null')||{};
-      // Always use Supabase data as authoritative source
-      localStorage.setItem('fleet_vehicles_v2', JSON.stringify(w.vehicles));
+      // Merge inteligente: preservar reboque/notes/tipoGalera local se a cloud não os tiver
+      const cloudVehicles = w.vehicles || [];
+      const localVehicles = JSON.parse(localStorage.getItem('fleet_vehicles_v2') || 'null');
+      let vehiclesToStore = cloudVehicles;
+      if (localVehicles && localVehicles.length) {
+        const localByMat = {};
+        localVehicles.forEach(v => { if (v.mat) localByMat[norm(v.mat)] = v; });
+        vehiclesToStore = cloudVehicles.map(cv => {
+          const lv = localByMat[norm(cv.mat || '')] || {};
+          const cloudTipoGeneric = !cv.tipo || cv.tipo === 'Galera';
+          const localTipoSpecific = ['Frio','Lona','Iso'].includes(lv.tipo || '');
+          return {
+            ...cv,
+            reboque: cv.reboque || lv.reboque || '',
+            notes:   cv.notes   || lv.notes   || '',
+            tipo:    (localTipoSpecific && cloudTipoGeneric) ? lv.tipo : (cv.tipo || lv.tipo || ''),
+          };
+        });
+      }
+      localStorage.setItem('fleet_vehicles_v2', JSON.stringify(vehiclesToStore));
       localStorage.setItem('fleet_meta_v2', JSON.stringify(nm));
       if (!localStorage.getItem('fleet_edits_v2')) localStorage.setItem('fleet_edits_v2', '{}');
       showSync('Sem '+w.week_num+' carregada', '#22c55e');
@@ -1136,6 +1154,30 @@ async function loadFromSupabase() {
           return;
         }
         localStorage.setItem(row.key, JSON.stringify(cloudVal));
+        return;
+      }
+      if (row.key === K_INTERNAL) {
+        const localInt = JSON.parse(localStorage.getItem(K_INTERNAL) || '{}');
+        const cloudInt = row.value || {};
+        // Merge: cloud base + local override (dados internos locais nunca são apagados pela cloud)
+        const merged = Object.assign({}, cloudInt, localInt);
+        localStorage.setItem(K_INTERNAL, JSON.stringify(merged));
+        return;
+      }
+      if (row.key === 'fleet_edits_v2') {
+        const localEdits = JSON.parse(localStorage.getItem('fleet_edits_v2') || '{}');
+        const cloudEdits = row.value || {};
+        if (localEdits && Object.keys(localEdits).length > 0) {
+          // Merge por posição: local ganha em todos os campos (preserva galera/notes/reboque)
+          const merged = {};
+          const allIdxs = new Set([...Object.keys(cloudEdits), ...Object.keys(localEdits)]);
+          allIdxs.forEach(idx => {
+            merged[idx] = Object.assign({}, cloudEdits[idx] || {}, localEdits[idx] || {});
+          });
+          localStorage.setItem('fleet_edits_v2', JSON.stringify(merged));
+        } else {
+          localStorage.setItem('fleet_edits_v2', JSON.stringify(cloudEdits));
+        }
         return;
       }
       if (row.key === 'fleet_registos_v2') {
@@ -1184,7 +1226,7 @@ async function forceSyncFromCloud() {
   showSync('A sincronizar...', '#93c5fd');
   const ok = await loadFromSupabase();
   if (ok) {
-    ALL_VEHICLES = ls(K_VEHICLES) || ALL_VEHICLES;
+    ALL_VEHICLES = applyInternal(ls(K_VEHICLES) || ALL_VEHICLES);
     mergeExtras();
     edits = ls(K_EDITS) || {};
     meta = ls(K_META) || meta;
@@ -1212,6 +1254,7 @@ async function saveWeekToSupabase(wn, yr) {
     await syncToSupabase(K_VEHICLES, ALL_VEHICLES);
     await syncToSupabase(K_META, {week:'Sem '+wn+' · '+yr,date:today,weekNum:wn,year:yr});
     await syncToSupabase(K_EXTRAS, getExtras());
+    await syncToSupabase(K_INTERNAL, saveInternal());
     ls(K_LOCAL_DIRTY, false);
     setTimeout(function() { if(btn){btn.textContent=orig;btn.style.background='';btn.disabled=false;} }, 3000);
   } catch(err) {
@@ -1264,6 +1307,7 @@ const K_HISTORY   = 'fleet_history_v2';
 const K_OFICINAS  = 'fleet_oficinas_v2'; // staged oficina lookups
 const K_EXTRAS    = 'fleet_extras_v1';    // viaturas adicionadas manualmente
 const K_LOCAL_DIRTY = 'fleet_local_dirty_v1'; // existe base local ainda não enviada para a cloud
+const K_INTERNAL    = 'fleet_internal_v2';    // dados internos permanentes: reboque, notes, tipoGalera por matrícula
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
 let ALL_VEHICLES = [];
@@ -1287,7 +1331,48 @@ function ls(key, val) {
 function saveEdits() {
   ls(K_EDITS, edits);
   syncToSupabase(K_EDITS, edits);
+  saveInternal();
   showSync('Guardado');
+}
+
+// Guarda reboque/notes/tipoGalera numa chave permanente independente do ciclo semanal
+function saveInternal() {
+  const internal = {};
+  ALL_VEHICLES.forEach((v, i) => {
+    const e = edits[i] || {};
+    const mat = norm(v.mat || v.plate || '');
+    if (!mat) return;
+    const reboque = e.reboque !== undefined ? e.reboque : (v.reboque || '');
+    const notes   = e.notes   !== undefined ? e.notes   : (v.notes   || '');
+    const galera  = e.galera  || (['Frio','Lona','Iso'].includes(v.tipo) ? v.tipo : '');
+    const entry = {};
+    if (reboque) entry.reboque = reboque;
+    if (notes)   entry.notes   = notes;
+    if (galera)  entry.galera  = galera;
+    if (Object.keys(entry).length) internal[mat] = entry;
+  });
+  ls(K_INTERNAL, internal);
+  return internal;
+}
+
+// Aplica dados internos guardados a um array de viaturas (reboque/notes/tipoGalera)
+function applyInternal(vehicles) {
+  const internal = ls(K_INTERNAL);
+  if (!internal || !vehicles || !vehicles.length) return vehicles;
+  return vehicles.map(v => {
+    const mat = norm(v.mat || v.plate || '');
+    if (!mat) return v;
+    const entry = internal[mat];
+    if (!entry) return v;
+    const cloudTipoGeneric = !v.tipo || v.tipo === 'Galera';
+    const internalTipoSpecific = ['Frio','Lona','Iso'].includes(entry.galera || '');
+    return {
+      ...v,
+      reboque: v.reboque || entry.reboque || '',
+      notes:   v.notes   || entry.notes   || '',
+      tipo:    (internalTipoSpecific && cloudTipoGeneric) ? entry.galera : v.tipo,
+    };
+  });
 }
 
 async function checkPrevSession() {
@@ -1310,7 +1395,7 @@ async function checkPrevSession() {
       if (ok && vAfter && vAfter.length > 0) {
         // Dados encontrados — entrar direto no dashboard
         showLoaderStatus('✅ Dados carregados da cloud', '#22c55e');
-        ALL_VEHICLES = vAfter;
+        ALL_VEHICLES = applyInternal(vAfter);
         mergeExtras();
         edits = ls(K_EDITS) || {};
         meta  = mAfter || meta;
@@ -1766,6 +1851,19 @@ function loadBase(file) {
       })).filter(v => v.mat && v.regiao.match(/Norte|PDTN|Sul|Centro|PDTC|PDTS/));
 
       if (!ALL_VEHICLES.length) throw new Error('Sem dados válidos ou regiões não reconhecidas.');
+
+      // Aplicar dados internos permanentes (reboque/notes/tipoGalera)
+      ALL_VEHICLES = applyInternal(ALL_VEHICLES);
+
+      // Mostrar diff vs semana anterior
+      const _prevVehicles = ls(K_VEHICLES) || [];
+      if (_prevVehicles.length) {
+        const _prevMats = new Set(_prevVehicles.map(v => norm(v.mat || '')));
+        const _currMats = new Set(ALL_VEHICLES.map(v => norm(v.mat || '')));
+        const _added   = ALL_VEHICLES.filter(v => v.mat && !_prevMats.has(norm(v.mat)));
+        const _removed = _prevVehicles.filter(v => v.mat && !_currMats.has(norm(v.mat)));
+        showFleetDiffAlert(_prevVehicles.length, ALL_VEHICLES.length, _added, _removed);
+      }
 
       // Extract week from filename
       const wm = file.name.match(/[Ss]em[\s_]?(\d+)/i) || file.name.match(/[Ww](?:eek)?[\s_]?(\d+)/);
@@ -3743,6 +3841,31 @@ function addExtraVehicle(mat, plate, tipo, transp, regiao, galera) {
 }
 
 
+function showFleetDiffAlert(prevCount, newCount, added, removed) {
+  document.getElementById('fleet-diff-alert')?.remove();
+  if (!prevCount || (!added.length && !removed.length && prevCount === newCount)) return;
+  const el = document.createElement('div');
+  el.id = 'fleet-diff-alert';
+  el.style.cssText = 'position:fixed;bottom:1.5rem;left:1.5rem;z-index:200;background:#1a1e25;border:1px solid rgba(99,102,241,.5);border-radius:var(--rl);padding:1rem 1.25rem;max-width:380px;box-shadow:0 8px 32px rgba(0,0,0,.5);animation:slideUp .2s ease';
+  const diff = newCount - prevCount;
+  const diffStr = diff > 0 ? `<span style="color:#86efac">+${diff}</span>` : diff < 0 ? `<span style="color:#fca5a5">${diff}</span>` : '<span style="color:var(--muted)">±0</span>';
+  let body = `<div style="font-size:13px;font-weight:600;color:#a5b4fc;margin-bottom:.5rem">📊 Diferença vs semana anterior: ${diffStr}</div>`;
+  body += `<div style="font-size:11px;color:var(--muted);margin-bottom:.5rem">${prevCount} → ${newCount} viaturas</div>`;
+  if (added.length) {
+    body += `<div style="font-size:11px;color:#86efac;margin-bottom:3px">🆕 Novas (${added.length}): ${added.map(v=>v.mat||v.plate).join(', ')}</div>`;
+  }
+  if (removed.length) {
+    body += `<div style="font-size:11px;color:#fca5a5;margin-top:3px">➖ Removidas (${removed.length}): ${removed.map(v=>v.mat||v.plate).join(', ')}</div>`;
+  }
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem">
+      <div>${body}</div>
+      <button onclick="document.getElementById('fleet-diff-alert').remove()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;line-height:1;padding:0;flex-shrink:0">×</button>
+    </div>`;
+  document.body.appendChild(el);
+  setTimeout(() => el?.remove(), 15000);
+}
+
 function showNewVehiclesAlert(newVehicles) {
   // Remove alerta anterior se existir
   document.getElementById('new-vehicles-alert')?.remove();
@@ -4479,9 +4602,18 @@ async function applyEmpresaFile() {
   syncToSupabase('fleet_edits_backup_before_empresa_v1', { savedAt: backupStamp, edits: prevEdits });
   syncToSupabase('fleet_extras_backup_before_empresa_v1', { savedAt: backupStamp, extras: prevExtras });
 
+  const _prevForDiff = ls(K_VEHICLES) || [];
   ALL_VEHICLES = empParsed;
   edits = {};
   meta  = { week: 'Sem ' + weekNum + ' · ' + year, date: new Date().toLocaleDateString('pt-PT'), weekNum, year };
+  if (_prevForDiff.length) {
+    const _pm = new Set(_prevForDiff.map(v => norm(v.mat || '')));
+    const _cm = new Set(ALL_VEHICLES.map(v => norm(v.mat || '')));
+    showFleetDiffAlert(_prevForDiff.length, ALL_VEHICLES.length,
+      ALL_VEHICLES.filter(v => v.mat && !_pm.has(norm(v.mat))),
+      _prevForDiff.filter(v => v.mat && !_cm.has(norm(v.mat)))
+    );
+  }
 
   ls(K_VEHICLES, ALL_VEHICLES);
   ls(K_META, meta);
