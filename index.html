@@ -1135,10 +1135,17 @@ async function loadFromSupabase() {
     const r2 = await sb.from('fleet_state').select('key,value');
     if (!r2.error && r2.data) {
       const resetRow = r2.data.find(r => r.key === K_CLOUD_RESET);
-      if (resetRow && resetRow.value) {
+      if (resetRow && resetRow.value && resetRow.value.resetEdits === true) {
         const cloudReset = JSON.stringify(resetRow.value);
         const localReset = localStorage.getItem(K_CLOUD_RESET);
         if (cloudReset !== localReset) {
+          const backup = {
+            savedAt: new Date().toISOString(),
+            reason: 'cloud reset marker',
+            edits: JSON.parse(localStorage.getItem(K_EDITS) || '{}'),
+            extras: JSON.parse(localStorage.getItem(K_EXTRAS) || '[]')
+          };
+          localStorage.setItem('fleet_local_backup_before_cloud_reset_v1', JSON.stringify(backup));
           localStorage.removeItem(K_EDITS);
           localStorage.removeItem(K_EXTRAS);
           localStorage.setItem(K_CLOUD_RESET, cloudReset);
