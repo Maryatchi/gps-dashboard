@@ -989,6 +989,22 @@ function showSync(msg, color) {
   el.style.display = 'inline'; clearTimeout(el._t);
   el._t = setTimeout(function() { el.style.display='none'; }, 3000);
 }
+let _offlineMode = false;
+function setOfflineBadge(isOffline) {
+  _offlineMode = isOffline;
+  let badge = document.getElementById('offline-badge');
+  if (isOffline) {
+    if (!badge) {
+      badge = document.createElement('div');
+      badge.id = 'offline-badge';
+      badge.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:9999;background:#92400e;color:#fcd34d;font-size:11px;font-weight:600;padding:4px 16px;border-radius:0 0 8px 8px;letter-spacing:.04em;pointer-events:none';
+      badge.textContent = '⚠️ SEM LIGAÇÃO À CLOUD — alterações guardadas localmente';
+      document.body.appendChild(badge);
+    }
+  } else {
+    badge?.remove();
+  }
+}
 // Estado de sincronização — guarda as gravações que falharam para re-tentar
 const _pendingSync = {};   // key -> valor mais recente por sincronizar
 let _retryTimer = null;
@@ -1020,6 +1036,7 @@ async function syncToSupabase(key, val) {
     // Sucesso — limpar pendência desta chave
     delete _pendingSync[key];
     updateSyncDot();
+    if (_offlineMode) setOfflineBadge(false);
     return true;
   } catch(e) {
     console.warn('sync error', key, errMsg(e));
@@ -1049,7 +1066,7 @@ function scheduleRetry() {
     }
     updateSyncDot();
     if (Object.keys(_pendingSync).length) { scheduleRetry(); }
-    else { showSync('Tudo guardado na cloud ✓', '#22c55e'); }
+    else { showSync('Tudo guardado na cloud ✓', '#22c55e'); setOfflineBadge(false); }
   }, 8000); // re-tenta a cada 8 segundos
 }
 
@@ -1207,8 +1224,9 @@ async function loadFromSupabase() {
     const kmsfRow = r2.data.find(r => r.key === K_KMSF);
     if (kmsfRow && kmsfRow.value) { localStorage.setItem(K_KMSF, JSON.stringify(kmsfRow.value)); }
     showSync('Sincronizado', '#22c55e');
+    setOfflineBadge(false);
     return true;
-  } catch(e) { console.warn('load error', e); showSync('Offline', '#f59e0b'); return false; }
+  } catch(e) { console.warn('load error', e); showSync('Offline', '#f59e0b'); setOfflineBadge(true); return false; }
 }
 async function forceSyncFromCloud() {
   if (ls(K_LOCAL_DIRTY) && ALL_VEHICLES.length) {
@@ -1339,9 +1357,9 @@ function saveEdits() {
 function saveInternal() {
   const internal = {};
   ALL_VEHICLES.forEach((v, i) => {
-    const e = edits[i] || {};
     const mat = norm(v.mat || v.plate || '');
     if (!mat) return;
+    const e = edits[mat] || {};
     const reboque = e.reboque !== undefined ? e.reboque : (v.reboque || '');
     const notes   = e.notes   !== undefined ? e.notes   : (v.notes   || '');
     const galera  = e.galera  || (['Frio','Lona','Iso'].includes(v.tipo) ? v.tipo : '');
@@ -1557,12 +1575,13 @@ function applyPortaData() {
     if (_tipoSemPorta(v.tipo)) return; // Tractores e Lonas não têm sensor de porta
     const mn = norm(v.mat), pn = norm(v.plate||'');
     const temPorta = portaData.has(mn) || portaData.has(pn);
+    const mk = eKey(v);
     if (temPorta) {
       ALL_VEHICLES[i] = { ...v, portaOK: true, msgPorta: '' };
-      if (edits[i]?.porta === 'REVER S.Porta') edits[i] = { ...(edits[i]||{}), porta: '' };
+      if (edits[mk]?.porta === 'REVER S.Porta') edits[mk] = { ...(edits[mk]||{}), porta: '' };
     } else {
       ALL_VEHICLES[i] = { ...v, portaOK: false, msgPorta: 'REVER S.Porta' };
-      edits[i] = { ...(edits[i]||{}), porta: 'REVER S.Porta' };
+      edits[mk] = { ...(edits[mk]||{}), porta: 'REVER S.Porta' };
     }
   });
 }
@@ -1590,7 +1609,8 @@ function applyPosData() {
     if (!pd) return; // Sem dados de posição → não toca
 
     const lastSeenUpd = pd.lastSeen || v.lastSeen || '';
-    const obsAtual = (edits[i]?.obs !== undefined ? edits[i].obs : v.obs) || '';
+    const mk2 = eKey(v);
+    const obsAtual = (edits[mk2]?.obs !== undefined ? edits[mk2].obs : v.obs) || '';
 
     // Não tocar em veículos em Oficina, Sinistro ou Removida
     if (['Oficina','Sinistro','Removida'].includes(obsAtual)) {
@@ -1601,20 +1621,19 @@ function applyPosData() {
     if (pd.days <= 2) {
       // 0-2 dias → GPS OK — limpar qualquer edição GPS negativa
       ALL_VEHICLES[i] = { ...v, gpsOK: true, msgGPS: '', daysAgo: pd.days, lastSeen: lastSeenUpd };
-      if (edits[i]?.gps && edits[i].gps !== 'GPS OK' && edits[i].gps !== '') {
-        console.log(`[posData] GPS OK → limpou edit "${edits[i].gps}" de ${v.mat}`);
-        edits[i] = { ...(edits[i]||{}), gps: '' };
+      if (edits[mk2]?.gps && edits[mk2].gps !== 'GPS OK' && edits[mk2].gps !== '') {
+        console.log(`[posData] GPS OK → limpou edit "${edits[mk2].gps}" de ${v.mat}`);
+        edits[mk2] = { ...(edits[mk2]||{}), gps: '' };
         cleaned++;
       }
     } else {
       // 3+ dias → REVER GPS
-      // Se estava marcado como Resolvido, desmarcar — o problema voltou
       ALL_VEHICLES[i] = { ...v, daysAgo: pd.days, lastSeen: lastSeenUpd };
-      if (edits[i]?.gps !== 'Instalar GPS') {
+      if (edits[mk2]?.gps !== 'Instalar GPS') {
         ALL_VEHICLES[i] = { ...ALL_VEHICLES[i], gpsOK: false, msgGPS: 'REVER GPS' };
-        const editUpd = { ...(edits[i]||{}), gps: 'REVER GPS' };
-        if (editUpd.obs === 'Resolvido') editUpd.obs = ''; // problema voltou → desmarcar resolvido
-        edits[i] = editUpd;
+        const editUpd = { ...(edits[mk2]||{}), gps: 'REVER GPS' };
+        if (editUpd.obs === 'Resolvido') editUpd.obs = '';
+        edits[mk2] = editUpd;
       }
     }
     updated++;
@@ -1663,57 +1682,33 @@ function checkStartReady() {
 let _editsSnapshotByMat = {};   // mat -> {edit, vehicle} guardado antes de carregar ficheiro empresa
 let _pendingConflicts = [];     // conflitos detetados a aguardar decisão
 
-// Remapeia edits por matrícula para o novo ALL_VEHICLES e deteta conflitos
+// Deteta conflitos entre edits mat-based e os dados vindos da empresa
 function remapEditsAndDetectConflicts() {
-  const newEdits = {};
   _pendingConflicts = [];
-
-  // Mapa matrícula -> índice no novo array
-  const matToIdx = {};
+  // Edits já são por matrícula — não há remapeamento necessário.
+  // Apenas detetar onde a correção difere do que a empresa enviou.
   ALL_VEHICLES.forEach((v, i) => {
-    const k = norm(v.mat) || norm(v.plate);
-    if (k) matToIdx[k] = i;
-  });
-
-  Object.keys(_editsSnapshotByMat).forEach(mat => {
-    const snap = _editsSnapshotByMat[mat];
-    const newIdx = matToIdx[mat];
-    if (newIdx === undefined) {
-      // Viatura corrigida já não está no ficheiro novo — ignorar (provavelmente saiu da frota)
-      return;
-    }
-    const e = snap.edit;
-    const empV = ALL_VEHICLES[newIdx]; // dados que a empresa enviou
-
-    // Detetar campos onde a TUA correção difere do que a empresa diz
+    const mat = eKey(v);
+    if (!mat || !edits[mat]) return;
+    const e = edits[mat];
     const fields = [
-      { k: 'gps',   label: 'GPS',         mine: e.gps,   theirs: empV.msgGPS },
-      { k: 'porta', label: 'Sensor Porta', mine: e.porta, theirs: empV.msgPorta },
-      { k: 'temp',  label: 'Temperatura', mine: e.temp,  theirs: empV.msgTemp },
-      { k: 'obs',   label: 'Observações', mine: e.obs,   theirs: empV.obs },
+      { k: 'gps',   label: 'GPS',          mine: e.gps,   theirs: v.msgGPS },
+      { k: 'porta', label: 'Sensor Porta',  mine: e.porta, theirs: v.msgPorta },
+      { k: 'temp',  label: 'Temperatura',   mine: e.temp,  theirs: v.msgTemp },
+      { k: 'obs',   label: 'Observações',   mine: e.obs,   theirs: v.obs },
     ];
     const diffs = fields.filter(f => f.mine !== undefined && f.mine !== '' && String(f.mine) !== String(f.theirs||''));
-
-    // Sempre re-aplicar o edit ao novo índice (preserva correção)
-    newEdits[newIdx] = e;
-
     if (diffs.length) {
       _pendingConflicts.push({
-        idx: newIdx,
-        mat: empV.plate || empV.mat,
-        transp: empV.transp,
+        idx: i,
+        mat: v.plate || v.mat,
+        transp: v.transp,
         diffs: diffs.map(d => ({ campo: d.label, k: d.k, minha: d.mine || '—', empresa: d.theirs || '—' })),
         edit: e,
       });
     }
   });
-
-  // Aplicar os edits remapeados (mantém as tuas correções por cima dos dados da empresa)
-  edits = newEdits;
-
-  if (_pendingConflicts.length) {
-    showConflictPanel();
-  }
+  if (_pendingConflicts.length) showConflictPanel();
 }
 
 // Painel que mostra os conflitos e deixa escolher: manter as minhas vs aceitar as deles
@@ -1806,14 +1801,7 @@ function closeConflictPanel() {
 function loadBase(file) {
   if (!file) return;
   setLoaderErr('');
-  // Snapshot das correções atuais por matrícula (antes de substituir ALL_VEHICLES)
-  _editsSnapshotByMat = {};
-  ALL_VEHICLES.forEach((v, i) => {
-    if (edits[i]) {
-      const key = norm(v.mat) || norm(v.plate);
-      if (key) _editsSnapshotByMat[key] = { edit: edits[i], vehicle: v };
-    }
-  });
+  // Edits são mat-based — não é necessário snapshot antes de substituir ALL_VEHICLES
   const reader = new FileReader();
   reader.onload = e => {
     try {
@@ -2066,26 +2054,25 @@ function startDashboard() {
 function migrateGaleraFromNotes() {
   let count = 0;
   ALL_VEHICLES.forEach((v, i) => {
-    const e = edits[i] || {};
+    const mk = eKey(v);
+    const e = (mk ? edits[mk] : null) || {};
     if (e.galera) return; // tipologia já definida — não tocar
     const notes = (e.notes !== undefined ? e.notes : v.notes || '').trim();
     if (!notes) return;
-    // detetar tipo (case-insensitive, palavra completa ou início de nota)
     const lower = notes.toLowerCase();
     let galera = '';
     if (/\bfrio\b/.test(lower))            galera = 'Frio';
     else if (/\blona\b/.test(lower))       galera = 'Lona';
     else if (/\bisot[eé]rmic[ao]\b/.test(lower) || /\biso\b/.test(lower)) galera = 'Iso';
     if (!galera) return;
-    // limpar a palavra das notas, preservando o resto
     const cleaned = notes
       .replace(/\bfrio\b/gi, '')
       .replace(/\blona\b/gi, '')
       .replace(/\bisot[eé]rmic[ao]\b/gi, '')
       .replace(/\biso\b/gi, '')
-      .replace(/^\s*[·\-,;]+\s*/,'').replace(/\s*[·\-,;]+\s*$/,'') // limpar separadores soltos no início/fim
+      .replace(/^\s*[·\-,;]+\s*/,'').replace(/\s*[·\-,;]+\s*$/,'')
       .replace(/\s{2,}/g,' ').trim();
-    edits[i] = { ...e, galera, notes: cleaned };
+    if (mk) edits[mk] = { ...e, galera, notes: cleaned };
     count++;
   });
   if (count > 0) { saveEdits(); console.log(`[migração] ${count} viaturas: tipologia extraída das notas`); }
@@ -2096,7 +2083,21 @@ function openDashboard() {
   document.getElementById('dashboard').style.display = 'block';
   const mt = document.getElementById('mobile-tabs'); if (mt) mt.classList.add('visible');
   applyTheme(localStorage.getItem('fleet_theme') || 'dark');
+  migrateEditsIfNeeded();
   sincronizarSemanaAtual();
+  // Auto-save: persiste edits localmente a cada 30s se houver alterações não gravadas
+  if (!window._autoSaveInterval) {
+    let _lastSaved = JSON.stringify(edits);
+    window._autoSaveInterval = setInterval(() => {
+      if (!ALL_VEHICLES.length) return;
+      const cur = JSON.stringify(edits);
+      if (cur !== _lastSaved) {
+        ls(K_EDITS, edits);
+        saveInternal();
+        _lastSaved = cur;
+      }
+    }, 30000);
+  }
   document.getElementById('week-badge').textContent = meta.week; const cmb=document.getElementById('cmb-week-badge'); if(cmb) cmb.textContent=meta.week; const kmsfwb=document.getElementById('kmsf-week-badge'); if(kmsfwb) kmsfwb.textContent=meta.week;
   edits = ls(K_EDITS) || edits;
   migrateGaleraFromNotes();
@@ -2117,9 +2118,11 @@ function sincronizarSemanaAtual() {
   const wReal = getWeekNum(hoje);
   const yReal = hoje.getFullYear();
   if (meta.weekNum !== wReal || meta.year !== yReal) {
+    const prevWeek = meta.weekNum;
     meta = { week: `Sem ${wReal} · ${yReal}`, date: hoje.toLocaleDateString('pt-PT'), weekNum: wReal, year: yReal };
     ls(K_META, meta);
     syncToSupabase(K_META, meta);
+    if (prevWeek) showSync(`Semana atualizada: Sem ${prevWeek} → Sem ${wReal}`, '#a5b4fc');
   }
 }
 
@@ -2155,9 +2158,28 @@ function goToLoader() {
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 function norm(s) { return String(s||'').toUpperCase().replace(/-/g,'').replace(/\s/g,'').trim(); }
+// Chave canónica de um veículo para edits mat-based
+function eKey(v) { return norm((v&&(v.mat||v.plate))||''); }
+
+// Migra edits antigos (por posição 0,1,2…) para edits por matrícula
+function migrateEditsIfNeeded() {
+  if (!ALL_VEHICLES.length) return;
+  const keys = Object.keys(edits);
+  if (!keys.length) return;
+  if (!keys.every(k => /^\d+$/.test(k))) return; // já está por mat
+  const newEdits = {};
+  keys.forEach(k => {
+    const v = ALL_VEHICLES[parseInt(k)];
+    const mat = v ? eKey(v) : '';
+    if (mat) newEdits[mat] = edits[k];
+  });
+  edits = newEdits;
+  ls(K_EDITS, edits);
+  syncToSupabase(K_EDITS, edits);
+}
 function getWeekNum(d) { d=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())); d.setUTCDate(d.getUTCDate()+4-(d.getUTCDay()||7)); return Math.ceil((((d-new Date(Date.UTC(d.getUTCFullYear(),0,1)))/86400000)+1)/7); }
 function getEff(v,i) {
-  const e=edits[i];
+  const e=edits[eKey(v)] ?? edits[i] ?? null;
   if(!e)return v;
   const msgGPS  = e.gps!==undefined   ? e.gps   : v.msgGPS;
   const msgPorta= e.porta!==undefined ? e.porta : v.msgPorta;
@@ -2328,6 +2350,8 @@ function renderTransporters() {
 }
 function renderVehicles() {
   const q=(document.getElementById('vsearch')?.value||'').toLowerCase();
+  // Calcular estado efetivo uma vez por viatura (evita chamadas repetidas a getEff)
+  const eff=ALL_VEHICLES.map((v,i)=>getEff(v,i));
   // Populate transporter dropdown if empty
   const tSel=document.getElementById('transp-filter');
   if(tSel && tSel.options.length===1){
@@ -2336,36 +2360,35 @@ function renderVehicles() {
   }
   const tFilt=tSel?.value||'all';
   let idx=ALL_VEHICLES.map((_,i)=>i).filter(i=>{
-    const v=getEff(ALL_VEHICLES[i],i);
+    const v=eff[i];
     return regMatch(v)&&(tFilt==='all'||v.transp===tFilt);
   });
   const f=currentVFilt;
-  const noOficina = i => !['Oficina','Sinistro','Removida'].includes(getEff(ALL_VEHICLES[i],i).obs);
-  if(f==='todos_gps') idx=idx.filter(i=>!!getEff(ALL_VEHICLES[i],i).msgGPS&&noOficina(i));
-  else if(f==='instalar') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgGPS==='Instalar GPS'&&noOficina(i));
-  else if(f==='rever_gps') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgGPS==='REVER GPS'&&noOficina(i));
-  else if(f==='porta') idx=idx.filter(i=>hasPorta(getEff(ALL_VEHICLES[i],i))&&getEff(ALL_VEHICLES[i],i).msgPorta==='REVER S.Porta'&&noOficina(i));
-  else if(f==='temp') idx=idx.filter(i=>hasTemp(getEff(ALL_VEHICLES[i],i))&&getEff(ALL_VEHICLES[i],i).msgTemp==='REVER Temperaturas'&&noOficina(i));
-  else if(f==='bateria') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgVolt==='REVER Bateria'&&noOficina(i));
-  else if(f==='oficina') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).obs==='Oficina');
-  else if(f==='sinistro') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).obs==='Sinistro');
-  else if(f==='removida') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).obs==='Removida');
-  else if(f==='editados') idx=idx.filter(i=>edits[i]);
-  else if(f==='ok') idx=idx.filter(i=>{const v=getEff(ALL_VEHICLES[i],i);return!v.status&&!v.obs&&!v.msgGPS&&!v.msgPorta&&!v.msgTemp;});
-  if(q) idx=idx.filter(i=>{const v=getEff(ALL_VEHICLES[i],i);return(v.mat+v.plate+v.transp+v.regiao).toLowerCase().includes(q);});
+  const noOficina = i => !['Oficina','Sinistro','Removida'].includes(eff[i].obs);
+  if(f==='todos_gps') idx=idx.filter(i=>!!eff[i].msgGPS&&noOficina(i));
+  else if(f==='instalar') idx=idx.filter(i=>eff[i].msgGPS==='Instalar GPS'&&noOficina(i));
+  else if(f==='rever_gps') idx=idx.filter(i=>eff[i].msgGPS==='REVER GPS'&&noOficina(i));
+  else if(f==='porta') idx=idx.filter(i=>hasPorta(eff[i])&&eff[i].msgPorta==='REVER S.Porta'&&noOficina(i));
+  else if(f==='temp') idx=idx.filter(i=>hasTemp(eff[i])&&eff[i].msgTemp==='REVER Temperaturas'&&noOficina(i));
+  else if(f==='bateria') idx=idx.filter(i=>eff[i].msgVolt==='REVER Bateria'&&noOficina(i));
+  else if(f==='oficina') idx=idx.filter(i=>eff[i].obs==='Oficina');
+  else if(f==='sinistro') idx=idx.filter(i=>eff[i].obs==='Sinistro');
+  else if(f==='removida') idx=idx.filter(i=>eff[i].obs==='Removida');
+  else if(f==='editados') idx=idx.filter(i=>!!edits[eKey(ALL_VEHICLES[i])]);
+  else if(f==='ok') idx=idx.filter(i=>{const v=eff[i];return!v.status&&!v.obs&&!v.msgGPS&&!v.msgPorta&&!v.msgTemp;});
+  if(q) idx=idx.filter(i=>{const v=eff[i];return(v.mat+v.plate+v.transp+v.regiao+(v.reboque||'')).toLowerCase().includes(q);});
   idx.sort((a,b)=>{
-    const va=getEff(ALL_VEHICLES[a],a), vb=getEff(ALL_VEHICLES[b],b);
+    const va=eff[a], vb=eff[b];
     const sc=v=>v.msgGPS==='Instalar GPS'?0:v.msgGPS==='REVER GPS'?1:v.msgPorta||v.msgTemp||v.msgVolt?2:v.obs==='Sinistro'?3:v.obs==='Oficina'?4:5;
     const sa=sc(va), sb=sc(vb);
     if(sa!==sb) return sa-sb;
-    // Within same category, sort REVER GPS by days (worst first)
     if(sa===1) return (vb.daysAgo||0)-(va.daysAgo||0);
     return 0;
   });
   document.getElementById('vcount').textContent=idx.length+' veículos';
   if(!idx.length){document.getElementById('vbody').innerHTML='<div class="no-data">Nenhum veículo encontrado.</div>';return;}
   document.getElementById('vbody').innerHTML=idx.map(i=>{
-    const v=getEff(ALL_VEHICLES[i],i),isEd=!!edits[i];
+    const v=eff[i],isEd=!!edits[eKey(ALL_VEHICLES[i])];
     let st='';
     if(v.obs==='Oficina') st='<span class="pill p-gray">Oficina</span>';
     else if(v.obs==='Sinistro') st='<span class="pill p-red">Sinistro</span>';
@@ -2429,8 +2452,8 @@ function hilite() {
 }
 function sel(btn,type) { mSel[type]=btn.dataset.val; hilite(); }
 function closeModal(e) { if(e&&e.target!==document.getElementById('modal-overlay'))return; document.getElementById('modal-overlay').classList.remove('open'); editingIdx=null; }
-function saveEdit() { if(editingIdx===null)return; const notes=document.getElementById('m-notes').value.trim(); edits[editingIdx]={obs:mSel.obs,gps:mSel.gps,porta:mSel.porta,temp:mSel.temp,galera:mSel.galera,notes}; saveEdits(); document.getElementById('modal-overlay').classList.remove('open'); upBadge(); renderAll(); editingIdx=null; }
-function clearOneEdit() { if(editingIdx!==null){delete edits[editingIdx];saveEdits();} document.getElementById('modal-overlay').classList.remove('open'); upBadge(); renderAll(); editingIdx=null; }
+function saveEdit() { if(editingIdx===null)return; const notes=document.getElementById('m-notes').value.trim(); const mk=eKey(ALL_VEHICLES[editingIdx]); if(mk) edits[mk]={obs:mSel.obs,gps:mSel.gps,porta:mSel.porta,temp:mSel.temp,galera:mSel.galera,notes}; saveEdits(); document.getElementById('modal-overlay').classList.remove('open'); upBadge(); renderAll(); editingIdx=null; }
+function clearOneEdit() { if(editingIdx!==null){ const mk=eKey(ALL_VEHICLES[editingIdx]); if(mk) delete edits[mk]; saveEdits(); } document.getElementById('modal-overlay').classList.remove('open'); upBadge(); renderAll(); editingIdx=null; }
 function resetAllEdits() { if(confirm('Limpar TODAS as edições guardadas?\n\nEsta ação não pode ser desfeita.')){edits={};saveEdits();upBadge();renderAll();} }
 
 // ── OFICINA PANEL ─────────────────────────────────────────────────────────────
@@ -2483,13 +2506,14 @@ function applyLookups(l1, l2) {
   if(l2) Object.assign(merged,l2);
   ALL_VEHICLES.forEach((v,i)=>{
     const mn=norm(v.mat), pn=norm(v.plate);
-    const mk=merged[mn]!==undefined?mn:(merged[pn]!==undefined?pn:null);
-    const cur=(edits[i]?.obs!==undefined)?edits[i].obs:v.obs;
-    if(mk){ const no=merged[mk]; if(cur!==no){edits[i]={...(edits[i]||{}),obs:no};} }
+    const fk=merged[mn]!==undefined?mn:(merged[pn]!==undefined?pn:null);
+    const ek=eKey(v);
+    const cur=(edits[ek]?.obs!==undefined)?edits[ek].obs:v.obs;
+    if(fk){ const no=merged[fk]; if(cur!==no){edits[ek]={...(edits[ek]||{}),obs:no};} }
     // Ficheiro 1 (diário) é fonte de verdade — limpa Oficina e Sinistro não presentes
-    else if((cur==='Oficina'||cur==='Sinistro') && l1 && !l1[mn] && !l1[pn]){edits[i]={...(edits[i]||{}),obs:''};}
+    else if((cur==='Oficina'||cur==='Sinistro') && l1 && !l1[mn] && !l1[pn]){edits[ek]={...(edits[ek]||{}),obs:''};}
     // Ficheiro 2 só limpa Sinistro se não houver ficheiro 1
-    else if(cur==='Sinistro' && !l1 && l2 && !l2[mn] && !l2[pn]){edits[i]={...(edits[i]||{}),obs:''};}
+    else if(cur==='Sinistro' && !l1 && l2 && !l2[mn] && !l2[pn]){edits[ek]={...(edits[ek]||{}),obs:''};}
   });
 }
 
@@ -2504,18 +2528,17 @@ function applyOpFiles() {
   let added=0,updated=0,removed=0,unchanged=0;
   ALL_VEHICLES.forEach((v,i)=>{
     const mn=norm(v.mat),pn=norm(v.plate);
-    const mk=merged[mn]!==undefined?mn:(merged[pn]!==undefined?pn:null);
-    const cur=(edits[i]?.obs!==undefined)?edits[i].obs:v.obs;
-    if(mk){const no=merged[mk];if(!cur){edits[i]={...(edits[i]||{}),obs:no};added++;}else if(cur!==no){edits[i]={...(edits[i]||{}),obs:no};updated++;}else unchanged++;}
-    // Ficheiro 1 (diário) é fonte de verdade — limpa Oficina e Sinistro não presentes
-    else if((cur==='Oficina'||cur==='Sinistro') && stagedLookups[0] && !stagedLookups[0][mn] && !stagedLookups[0][pn]){edits[i]={...(edits[i]||{}),obs:''};removed++;}
-    // Ficheiro 2 só limpa Sinistro se não houver ficheiro 1
-    else if(cur==='Sinistro' && !stagedLookups[0] && stagedLookups[1] && !stagedLookups[1][mn] && !stagedLookups[1][pn]){edits[i]={...(edits[i]||{}),obs:''};removed++;}
+    const fk2=merged[mn]!==undefined?mn:(merged[pn]!==undefined?pn:null);
+    const ek2=eKey(v);
+    const cur=(edits[ek2]?.obs!==undefined)?edits[ek2].obs:v.obs;
+    if(fk2){const no=merged[fk2];if(!cur){edits[ek2]={...(edits[ek2]||{}),obs:no};added++;}else if(cur!==no){edits[ek2]={...(edits[ek2]||{}),obs:no};updated++;}else unchanged++;}
+    else if((cur==='Oficina'||cur==='Sinistro') && stagedLookups[0] && !stagedLookups[0][mn] && !stagedLookups[0][pn]){edits[ek2]={...(edits[ek2]||{}),obs:''};removed++;}
+    else if(cur==='Sinistro' && !stagedLookups[0] && stagedLookups[1] && !stagedLookups[1][mn] && !stagedLookups[1][pn]){edits[ek2]={...(edits[ek2]||{}),obs:''};removed++;}
   });
   upBadge(); renderAll();
   const ofData={l1:stagedLookups[0],l2:stagedLookups[1]};ls(K_OFICINAS,ofData);syncToSupabase(K_OFICINAS,ofData);
-  const newOf=ALL_VEHICLES.map((_,i)=>(edits[i]?.obs!==undefined?edits[i].obs:ALL_VEHICLES[i].obs)).filter(o=>o==='Oficina').length;
-  const newSin=ALL_VEHICLES.map((_,i)=>(edits[i]?.obs!==undefined?edits[i].obs:ALL_VEHICLES[i].obs)).filter(o=>o==='Sinistro').length;
+  const newOf=ALL_VEHICLES.map((v2,i)=>(edits[eKey(v2)]?.obs!==undefined?edits[eKey(v2)].obs:v2.obs)).filter(o=>o==='Oficina').length;
+  const newSin=ALL_VEHICLES.map((v2,i)=>(edits[eKey(v2)]?.obs!==undefined?edits[eKey(v2)].obs:v2.obs)).filter(o=>o==='Sinistro').length;
   const names=[stagedNames[0],stagedNames[1]].filter(Boolean).join(' + ');
   resEl.innerHTML=`✅ <strong>${names}</strong><br>🆕 Novas: <strong>${added}</strong> · 🔄 Atualizadas: <strong>${updated}</strong> · ✅ Saídas: <strong>${removed}</strong><br>📊 Oficina: <strong>${newOf}</strong> · Sinistro: <strong>${newSin}</strong>`;
   resEl.style.display='block';
@@ -2715,9 +2738,14 @@ function exportExcel() {
   const ph=['Matrícula','Placa','Tipo','Transportador','Região','Msg GPS','Msg Porta','Msg Temp','Observações','Notas'];
   const pd2=d.filter(v=>v.msgGPS||v.msgPorta||v.msgTemp||v.msgVolt||v.obs).map(v=>[v.mat,v.plate,v.tipo,v.transp,v.regiao,v.msgGPS,v.msgPorta,v.msgTemp,v.obs,v.notes||'']);
   const ws2=XLSX.utils.aoa_to_sheet([ph,...pd2]);XLSX.utils.book_append_sheet(wb,ws2,'Problemas');
-  const ah=['Matrícula','Placa','Tipo','Transportador','Região','GPS OK','Porta OK','Temp OK','Taco OK','CanBus OK','Volt OK','Observações','Notas'];
-  const ar=d.map(v=>[v.mat,v.plate,v.tipo,v.transp,v.regiao,v.gpsOK?'SIM':'NÃO',v.portaOK?'SIM':'NÃO',v.tempOK?'SIM':'NÃO',v.tacoOK?'SIM':'NÃO',v.canbusOK?'SIM':'NÃO',v.voltOK?'SIM':'NÃO',v.obs,v.notes||'']);
-  const ws3=XLSX.utils.aoa_to_sheet([ah,...ar]);XLSX.utils.book_append_sheet(wb,ws3,'Todos os veículos');
+  const ah=['Matrícula','Placa','Tipo','Transportador','Região','GPS OK','Porta OK','Temp OK','Taco OK','CanBus OK','Volt OK','Observações','Notas','Último Sinal','Dias Sem Sinal'];
+  const _today=new Date(); _today.setHours(0,0,0,0);
+  const ar=d.map(v=>{
+    let lastSeen='',daysAgo='';
+    if(v.lastSeen){const d2=new Date(v.lastSeen);if(!isNaN(d2)){lastSeen=d2.toLocaleDateString('pt-PT');daysAgo=Math.round((_today-d2)/86400000);}}
+    return[v.mat,v.plate,v.tipo,v.transp,v.regiao,v.gpsOK?'SIM':'NÃO',v.portaOK?'SIM':'NÃO',v.tempOK?'SIM':'NÃO',v.tacoOK?'SIM':'NÃO',v.canbusOK?'SIM':'NÃO',v.voltOK?'SIM':'NÃO',v.obs,v.notes||'',lastSeen,daysAgo];
+  });
+  const ws3=XLSX.utils.aoa_to_sheet([ah,...ar]);ws3['!cols']=[...(Array(13).fill({wch:14})),{wch:14},{wch:16}];XLSX.utils.book_append_sheet(wb,ws3,'Todos os veículos');
   const tMap={};d.forEach(v=>{const t=v.transp||'—';if(!tMap[t])tMap[t]=[];tMap[t].push(v);});
   const th=['Transportador','Total','GPS%','Porta%','Temp%','Volt%','Instalar GPS','REVER GPS','Porta','Bateria','Oficina','Sinistro'];
   const tr=Object.entries(tMap).sort((a,b)=>b[1].length-a[1].length).map(([n,vs])=>{const tot=vs.length,pct=f=>tot?Math.round(vs.filter(v=>v[f]).length/tot*100)+'%':'—';const cnt=fn=>vs.filter(fn).length;return[n,tot,pct('gpsOK'),pct('portaOK'),pct('tempOK'),pct('voltOK'),cnt(v=>v.msgGPS==='Instalar GPS'),cnt(v=>v.msgGPS==='REVER GPS'),cnt(v=>v.msgPorta==='REVER S.Porta'),cnt(v=>v.msgVolt==='REVER Bateria'),cnt(v=>v.obs==='Oficina'),cnt(v=>v.obs==='Sinistro')];});
@@ -2835,7 +2863,8 @@ function applyRemoverData(rows, fname, stElId, resultElId, errElId) {
   let matched = 0;
   ALL_VEHICLES.forEach((v, i) => {
     if (removed.has(norm(v.mat)) || removed.has(norm(v.plate))) {
-      edits[i] = { ...(edits[i]||{}), obs: 'Removida', gps: '', porta: '', temp: '' };
+      const ek = eKey(v);
+      edits[ek] = { ...(edits[ek]||{}), obs: 'Removida', gps: '', porta: '', temp: '' };
       matched++;
     }
   });
@@ -2916,9 +2945,10 @@ function applyNotasData(rows, fname, stElId, resultElId, errElId) {
       // Verificar se deve marcar como Removida
       const probNorm = prob.toLowerCase();
       const isRemovida = /saiu da frota|retirar gps/i.test(probNorm) || /saiu da frota|retirar gps/i.test(note.toLowerCase());
-      const editUpd = { ...(edits[idx]||{}), notes: note + (prob ? ' · ' + prob : '') };
+      const ekN = eKey(ALL_VEHICLES[idx]);
+      const editUpd = { ...(edits[ekN]||{}), notes: note + (prob ? ' · ' + prob : '') };
       if (isRemovida) editUpd.obs = 'Removida';
-      edits[idx] = editUpd;
+      edits[ekN] = editUpd;
       updated++;
 
       // Add to registos (avoid duplicates by mat+nota)
@@ -2950,8 +2980,7 @@ function applyNotasData(rows, fname, stElId, resultElId, errElId) {
         extras.push(newV);
         saveExtras(extras);
         ALL_VEHICLES.push(newV);
-        const newIdx = ALL_VEHICLES.length - 1;
-        edits[newIdx] = { gps: 'Instalar GPS', notes: note };
+        edits[eKey(newV)] = { gps: 'Instalar GPS', notes: note };
         saveEdits();
       }
       notFound++;
@@ -3249,7 +3278,7 @@ function generateBaseJSON() {
 
   ALL_VEHICLES.forEach((v, i) => {
     const mn = norm(v.mat), pn = norm(v.plate);
-    const e = edits[i] || {};
+    const e = edits[eKey(v)] || {};
     // Skip removed / oficina / sinistro — don't change their status
     const currentObs = e.obs !== undefined ? e.obs : v.obs;
     if (['Removida','Oficina','Sinistro'].includes(currentObs)) return;
@@ -3280,7 +3309,7 @@ function generateBaseJSON() {
     if (v.msgTemp === 'REVER Temperaturas') newReverTemp++;
 
     // Apply to edits
-    edits[i] = {
+    edits[eKey(v)] = {
       ...e,
       gps: newGPS,
       porta: newPorta,
@@ -3405,7 +3434,7 @@ function exportListaFiltrada() {
   else if(f==='oficina') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).obs==='Oficina');
   else if(f==='sinistro') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).obs==='Sinistro');
   else if(f==='removida') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).obs==='Removida');
-  else if(f==='editados') idx=idx.filter(i=>edits[i]);
+  else if(f==='editados') idx=idx.filter(i=>!!edits[eKey(ALL_VEHICLES[i])]);
   else if(f==='ok') idx=idx.filter(i=>{const v=getEff(ALL_VEHICLES[i],i);return!v.status&&!v.obs&&!v.msgGPS&&!v.msgPorta&&!v.msgTemp;});
   if(q) idx=idx.filter(i=>{const v=getEff(ALL_VEHICLES[i],i);return(v.mat+v.plate+v.transp+v.regiao).toLowerCase().includes(q);});
 
@@ -3832,8 +3861,7 @@ function addExtraVehicle(mat, plate, tipo, transp, regiao, galera) {
   saveExtras(extras);
   ALL_VEHICLES.push(v);
   // Definir tipologia imediatamente via edits
-  const idx = ALL_VEHICLES.length - 1;
-  edits[idx] = { ...(edits[idx]||{}), galera: galera||'', gps: 'Instalar GPS' };
+  edits[eKey(v)] = { ...(edits[eKey(v)]||{}), galera: galera||'', gps: 'Instalar GPS' };
   saveEdits();
   renderAll();
   showSync('Viatura adicionada');
@@ -4592,6 +4620,12 @@ async function applyEmpresaFile() {
   if (!empParsed) return;
   const weekNum = parseInt(document.getElementById('emp-week').value) || 20;
   const year    = parseInt(document.getElementById('emp-year').value)  || 2026;
+  const editCount = Object.keys(edits).length;
+  const msg = `Aplicar ficheiro empresa — Sem ${weekNum} · ${year}?\n\n` +
+    `Substitui ${ALL_VEHICLES.length} veículos por ${empParsed.length} viaturas.\n` +
+    (editCount ? `✅ As tuas ${editCount} correções manuais serão preservadas automaticamente.\n` : '') +
+    `\nContinuar?`;
+  if (!confirm(msg)) return;
 
   // Apply to dashboard
   const backupStamp = new Date().toISOString();
