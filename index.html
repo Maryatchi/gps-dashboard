@@ -1440,10 +1440,22 @@ function loadPortas(file) {
   reader.readAsArrayBuffer(file);
 }
 
-// Aplicar dados de porta aos veículos
+// ── Regras de sensor por tipo (definidas cedo para uso em applyPortaData) ──
+// Lona: sem porta nem temperatura | Iso: sem temperatura (tem porta) | Frio: tem porta e temperatura
+// Tractor: sem porta nem temperatura
+// TJA: tacógrafo removido em todas as viaturas (mantém CanBus)
+const _tipoSemPorta = t => t === 'Lona' || t === 'Tractor';
+const _tipoSemTemp  = t => t === 'Lona' || t === 'Iso' || t === 'Tractor';
+// Tacógrafo aplica a Rigido+Tractor, EXCETO em viaturas TJA (sem JMR.TJA)
+const _semTaco      = v => (v.tipo !== 'Rigido' && v.tipo !== 'Tractor') || v.transp === 'TJA';
+// CanBus aplica a Rigido+Tractor (sem exceções por transportador)
+const _semCanbus    = v => (v.tipo !== 'Rigido' && v.tipo !== 'Tractor');
+
+// Aplicar dados de porta aos veículos (salta tipos sem sensor de porta)
 function applyPortaData() {
   if (!portaData.size) return;
   ALL_VEHICLES.forEach((v, i) => {
+    if (_tipoSemPorta(v.tipo)) return; // Tractores e Lonas não têm sensor de porta
     const mn = norm(v.mat), pn = norm(v.plate||'');
     const temPorta = portaData.has(mn) || portaData.has(pn);
     if (temPorta) {
@@ -1712,14 +1724,18 @@ function loadBase(file) {
 
       const toBool = v => { if (!v) return false; if (typeof v==='boolean') return v; return String(v).trim().toUpperCase() === 'TRUE' || v == 1; };
       const str = v => v != null ? String(v).trim() : '';
+      const pick = (r, keys) => {
+        for (const k of keys) if (r[k] !== undefined && r[k] !== null) return r[k];
+        return '';
+      };
 
       ALL_VEHICLES = raw.map(r => ({
         mat:    str(r['Matricula']||r['matricula']||''),
         plate:  str(r['licensePlate']||''),
         tipo:   str(r['TipoVeiculo']||''),
         transp: str(r['Transportador']||''),
-        regiao: str(r['Região']||r['Regiao']||''),
-        obs:    str(r['Observações']||r['Observacoes']||''),
+        regiao: str(pick(r, ['Região','Regiao','RegiÃ£o'])),
+        obs:    str(pick(r, ['Observações','Observacoes','ObservaÃ§Ãµes'])),
         msgGPS: str(r['MsgGPS']||''),
         msgPorta:str(r['MsgPorta']||''),
         msgTemp: str(r['MsgTemp']||''),
@@ -2042,8 +2058,8 @@ function getEff(v,i) {
     // Resolvido só força OK se o veículo não tem REVER GPS activo por dias sem sinal
     const temRevrGPS = (msgGPS === 'REVER GPS') && (v.daysAgo >= 3);
     gpsOK   = temRevrGPS ? false : true;
-    portaOK = true;
-    tempOK  = true;
+    portaOK = _tipoSemPorta(v.tipo) ? false : true;
+    tempOK  = _tipoSemTemp(v.tipo) ? false : true;
   } else {
     if (e.gps!==undefined)   gpsOK   = (e.gps==='' || e.gps==='GPS OK');
     if (e.porta!==undefined) portaOK = (e.porta==='' || e.porta==='Porta OK');
@@ -2052,12 +2068,10 @@ function getEff(v,i) {
   return{...v,obs,msgGPS,msgPorta,msgTemp,gpsOK,portaOK,tempOK,notes:e.notes!==undefined?e.notes:v.notes||'',tipo:e.galera?e.galera:v.tipo};
 }
 // Regras de equipamento por tipo de galera:
-// Lona: sem sensor de porta nem temperatura
-// Iso: sem sensor de temperatura (tem porta)
-// Frio: tem porta e temperatura
+// Regras de equipamento por tipo (ver _tipoSemPorta/_tipoSemTemp definidos acima)
 // Oficina/Sinistro: excluídos da % GPS activo
-const hasPorta = v => v.tipo !== 'Lona' && v.tipo !== 'Tractor';
-const hasTemp  = v => v.tipo !== 'Lona' && v.tipo !== 'Iso' && v.tipo !== 'Tractor';
+const hasPorta = v => !_tipoSemPorta(v.tipo);
+const hasTemp  = v => !_tipoSemTemp(v.tipo);
 const isAtivo  = v => !['Oficina','Sinistro'].includes(v.obs);
 function regMatch(v) { if(currentRegion==='ALL')return true; if(currentRegion==='NORTE_PDTN')return v.regiao==='Norte'||v.regiao==='PDTN'; return v.regiao===currentRegion; }
 function getFilt() {
@@ -2102,15 +2116,17 @@ function renderSysBars() {
   const dAtivo=d.filter(isAtivo); const tAtivo=dAtivo.length||1;
   const dPorta=d.filter(hasPorta); const tPorta=dPorta.length||1;
   const dTemp=d.filter(hasTemp);   const tTemp=dTemp.length||1;
-  // Taco/CanBus: excluir Galeras + Tractores/Rígidos da TJA (sem autorização)
-  const dTaco = d.filter(v => v.tipo !== 'Galera' && v.tipo !== 'Lona' && v.tipo !== 'Iso' && v.tipo !== 'Frio' && !(v.transp === 'TJA' && (v.tipo === 'Tractor' || v.tipo === 'Rígido' || v.tipo === 'Rigido')));
-  const tTaco = dTaco.length || 1;
+  // Taco/CanBus base: só Rigido+Tractor. Tacógrafo exclui adicionalmente TJA (sensor removido).
+  const dCanbus = d.filter(v => !_semCanbus(v));
+  const tCanbus = dCanbus.length || 1;
+  const dTaco   = d.filter(v => !_semTaco(v));
+  const tTaco   = dTaco.length || 1;
   const sys=[
     {n:'GPS',        ok:dAtivo.filter(v=>v.gpsOK).length,     total:tAtivo},
     {n:'Porta',      ok:dPorta.filter(v=>v.portaOK).length,   total:tPorta},
     {n:'Temperaturas',ok:dTemp.filter(v=>v.tempOK).length,    total:tTemp},
     {n:'Tacógrafo',  ok:dTaco.filter(v=>v.tacoOK).length,     total:tTaco},
-    {n:'CanBus',     ok:dTaco.filter(v=>v.canbusOK).length,   total:tTaco},
+    {n:'CanBus',     ok:dCanbus.filter(v=>v.canbusOK).length, total:tCanbus},
     {n:'Voltagem',   ok:d.filter(v=>v.voltOK).length,         total:t},
   ];
   document.getElementById('sys-bars').innerHTML=sys.map(s=>{const p=Math.round(s.ok/s.total*100);return`<div class="sys-row"><span class="sys-name">${s.n}</span><div class="track"><div class="fill" style="width:${p}%;background:${bc(p)}"></div></div><span class="sys-pct">${p}%</span><span class="sys-ct">${s.ok}/${s.total}</span></div>`;}).join('');
@@ -2526,6 +2542,11 @@ function exportFormatoEmpresa() {
 
   const rows = ALL_VEHICLES.map((v, i) => {
     const ev = getEff(v, i); // estado efetivo = dados base + as tuas correções
+    // Sensores não aplicáveis ao tipo/transportador → exportar como FALSE
+    const portaApplies = !_tipoSemPorta(ev.tipo);
+    const tempApplies  = !_tipoSemTemp(ev.tipo);
+    const tacoApplies  = !_semTaco(ev);   // TJA exclui
+    const canbusApplies= !_semCanbus(ev);
     return [
       ev.mat || '',
       ev.plate || '',
@@ -2534,15 +2555,15 @@ function exportFormatoEmpresa() {
       ev.regiao || '',
       ev.obs || '',
       ev.msgGPS || '',
-      ev.msgPorta || '',
-      ev.msgTemp || '',
+      portaApplies ? (ev.msgPorta || '') : '',
+      tempApplies ? (ev.msgTemp || '') : '',
       ev.msgVolt || '',
       ev.status || '',
       bool(ev.gpsOK),
-      bool(ev.portaOK),
-      bool(ev.tempOK),
-      bool(ev.tacoOK),
-      bool(ev.canbusOK),
+      bool(portaApplies && ev.portaOK),
+      bool(tempApplies && ev.tempOK),
+      bool(tacoApplies && ev.tacoOK),
+      bool(canbusApplies && ev.canbusOK),
       bool(ev.voltOK),
     ];
   });
@@ -3169,7 +3190,7 @@ function generateBaseJSON() {
   const gpsP = Math.round(newGpsOK/total*100);
   document.getElementById('gen-result').innerHTML = `
     <div style="background:var(--green-dim);border:1px solid rgba(34,197,94,.25);border-radius:var(--rl);padding:1.25rem;font-size:13px;line-height:1.9;color:#86efac">
-      ✅ <strong>Base JSON Semana ${weekNum} · ${year} gerado e aplicado!</strong> · Limiar: ${threshDays} dias<br>
+      ✅ <strong>Base JSON Semana ${weekNum} · ${year} gerado e aplicado!</strong> · Limiar: ${thresholdDays} dias<br>
       <span style="color:var(--text)">
         📍 GPS OK: <strong>${newGpsOK}</strong> (${gpsP}%) &nbsp;·&nbsp;
         🟡 REVER GPS: <strong>${newReverGPS}</strong> &nbsp;·&nbsp;
@@ -4265,6 +4286,23 @@ function parseEmpresaFiles() {
   for (const src of empRawData) {
     if (!src) continue;
     const headers = src.rows[0].map(h => String(h||'').trim());
+    const findHeader = (...names) => {
+      for (const name of names) {
+        if (name.endsWith('*')) {
+          const prefix = name.slice(0, -1).toLowerCase();
+          const pos = headers.findIndex(h => String(h||'').toLowerCase().startsWith(prefix));
+          if (pos >= 0) return pos;
+        } else {
+          const pos = headers.indexOf(name);
+          if (pos >= 0) return pos;
+        }
+      }
+      return -1;
+    };
+    const boolCell = v => {
+      const s = String(v ?? '').trim().toLowerCase();
+      return v === true || v === 1 || s === 'true' || s === '1' || s === 'sim';
+    };
     const idx = {
       mat:   headers.indexOf('Matricula'),
       plate: headers.indexOf('licensePlate'),
@@ -4284,6 +4322,16 @@ function parseEmpresaFiles() {
       msgVolt: headers.indexOf('MsgVolt'),
       lastDate:headers.indexOf('LastLocationDate'),
     };
+    idx.mat     = findHeader('Matricula','Matrícula');
+    idx.regiao  = findHeader('Região','Regiao','RegiÃ£o','Regi*');
+    idx.obs     = findHeader('Observações','Observacoes','ObservaÃ§Ãµes','Observa*');
+    idx.gpsOK   = findHeader('GpsOK','GPS_OK');
+    idx.portaOK = findHeader('PortaOK','PORTA_OK');
+    idx.tempOK  = findHeader('TemperaturasOK','TEMPERATURAS_OK');
+    idx.tacoOK  = findHeader('TacografoOK','TACOGRAFO_OK');
+    idx.cbusOK  = findHeader('CanBusOK','CANBUS_OK');
+    idx.voltOK  = findHeader('VoltageOK','VOLTAGE_OK');
+    idx.status  = findHeader('Status');
     if (idx.mat < 0) continue;
 
     for (let i = 1; i < src.rows.length; i++) {
@@ -4300,16 +4348,17 @@ function parseEmpresaFiles() {
         regiao:  idx.regiao>=0 ? String(row[idx.regiao]||'').trim() : (existing.regiao||''),
         tipo:    idx.tipo>=0   ? String(row[idx.tipo]||'').trim()   : (existing.tipo||''),
         obs:     (idx.obs>=0 && row[idx.obs] && String(row[idx.obs]).trim() !== 'nan') ? String(row[idx.obs]).trim() : (existing.obs||''),
-        gpsOK:   idx.gpsOK>=0   ? (String(row[idx.gpsOK]).toLowerCase()==='true') : (existing.gpsOK||false),
-        portaOK: idx.portaOK>=0 ? (String(row[idx.portaOK]).toLowerCase()==='true') : (existing.portaOK||false),
-        tempOK:  idx.tempOK>=0  ? (String(row[idx.tempOK]).toLowerCase()==='true') : (existing.tempOK||false),
-        tacoOK:  idx.tacoOK>=0  ? (String(row[idx.tacoOK]).toLowerCase()==='true') : (existing.tacoOK||false),
-        canbusOK:idx.cbusOK>=0  ? (String(row[idx.cbusOK]).toLowerCase()==='true') : (existing.canbusOK||false),
-        voltOK:  idx.voltOK>=0  ? (String(row[idx.voltOK]).toLowerCase()==='true') : (existing.voltOK||false),
+        gpsOK:   idx.gpsOK>=0   ? boolCell(row[idx.gpsOK])   : (existing.gpsOK||false),
+        portaOK: idx.portaOK>=0 ? boolCell(row[idx.portaOK]) : (existing.portaOK||false),
+        tempOK:  idx.tempOK>=0  ? boolCell(row[idx.tempOK])  : (existing.tempOK||false),
+        tacoOK:  idx.tacoOK>=0  ? boolCell(row[idx.tacoOK])  : (existing.tacoOK||false),
+        canbusOK:idx.cbusOK>=0  ? boolCell(row[idx.cbusOK])  : (existing.canbusOK||false),
+        voltOK:  idx.voltOK>=0  ? boolCell(row[idx.voltOK])  : (existing.voltOK||false),
         msgGPS:  (idx.msgGPS>=0 && row[idx.msgGPS] && String(row[idx.msgGPS]).trim()!=='nan') ? String(row[idx.msgGPS]).trim() : (existing.msgGPS||''),
         msgPorta:(idx.msgPorta>=0 && row[idx.msgPorta] && String(row[idx.msgPorta]).trim()!=='nan') ? String(row[idx.msgPorta]).trim() : (existing.msgPorta||''),
         msgTemp: (idx.msgTemp>=0 && row[idx.msgTemp] && String(row[idx.msgTemp]).trim()!=='nan') ? String(row[idx.msgTemp]).trim() : (existing.msgTemp||''),
         msgVolt: (idx.msgVolt>=0 && row[idx.msgVolt] && String(row[idx.msgVolt]).trim()!=='nan') ? String(row[idx.msgVolt]).trim() : (existing.msgVolt||''),
+        status:  (idx.status>=0 && row[idx.status] && String(row[idx.status]).trim()!=='nan') ? String(row[idx.status]).trim() : (existing.status||''),
         lastSeen: idx.lastDate>=0 && row[idx.lastDate] ? String(row[idx.lastDate]).slice(0,16).replace('T',' ') : (existing.lastSeen||''),
         daysAgo: existing.daysAgo || 9999,
       };
@@ -4330,32 +4379,41 @@ function parseEmpresaFiles() {
 
   // Match against existing ALL_VEHICLES to preserve notes, reboque, and filter to Norte/PDTN
   const result = [];
-  const existingMats = new Set(ALL_VEHICLES.map(v => norm(v.mat)));
+  const existingByMat = {};
+  ALL_VEHICLES.forEach((v, i) => {
+    const ev = getEff(v, i);
+    if (norm(ev.mat)) existingByMat[norm(ev.mat)] = ev;
+    if (norm(ev.plate)) existingByMat[norm(ev.plate)] = ev;
+  });
 
-  for (const v of ALL_VEHICLES) {
-    const mn = norm(v.mat);
-    const empRow = allRows[mn] || allRows[norm(v.plate||'')];
-    if (empRow) {
-      result.push({
-        ...v,
-        gpsOK:   empRow.gpsOK,
-        portaOK: empRow.portaOK,
-        tempOK:  empRow.tempOK,
-        tacoOK:  empRow.tacoOK,
-        canbusOK:empRow.canbusOK,
-        voltOK:  empRow.voltOK,
-        msgGPS:  empRow.msgGPS,
-        msgPorta:empRow.msgPorta,
-        msgTemp: empRow.msgTemp,
-        msgVolt: empRow.msgVolt,
-        obs:     empRow.obs || v.obs || '',
-        lastSeen:empRow.lastSeen || v.lastSeen || '',
-        daysAgo: empRow.daysAgo !== undefined ? empRow.daysAgo : (v.daysAgo||9999),
-        // Preserve: notes, reboque, plate, tipo, transp, regiao
-      });
-    } else {
-      result.push(v); // keep existing if not in empresa file
-    }
+  for (const mat in allRows) {
+    const empRow = allRows[mat];
+    if (!['Norte','PDTN'].includes(empRow.regiao)) continue;
+    const existing = existingByMat[mat] || existingByMat[norm(empRow.plate || '')] || {};
+    result.push({
+      ...existing,
+      mat:      empRow.mat || existing.mat || mat,
+      plate:    empRow.plate || existing.plate || '',
+      tipo:     empRow.tipo || existing.tipo || '',
+      transp:   empRow.transp || existing.transp || '',
+      regiao:   empRow.regiao || existing.regiao || '',
+      obs:      empRow.obs || '',
+      gpsOK:    empRow.gpsOK,
+      portaOK:  empRow.portaOK,
+      tempOK:   empRow.tempOK,
+      tacoOK:   empRow.tacoOK,
+      canbusOK: empRow.canbusOK,
+      voltOK:   empRow.voltOK,
+      msgGPS:   empRow.msgGPS,
+      msgPorta: empRow.msgPorta,
+      msgTemp:  empRow.msgTemp,
+      msgVolt:  empRow.msgVolt,
+      status:   empRow.status || '',
+      lastSeen: empRow.lastSeen || existing.lastSeen || '',
+      daysAgo:  empRow.daysAgo !== undefined ? empRow.daysAgo : (existing.daysAgo||9999),
+      notes:    existing.notes || '',
+      reboque:  existing.reboque || '',
+    });
   }
 
   empParsed = result;
@@ -4389,6 +4447,14 @@ async function applyEmpresaFile() {
   const year    = parseInt(document.getElementById('emp-year').value)  || 2026;
 
   // Apply to dashboard
+  const backupStamp = new Date().toISOString();
+  const prevEdits = edits || {};
+  const prevExtras = getExtras();
+  ls('fleet_edits_backup_before_empresa_v1', { savedAt: backupStamp, edits: prevEdits });
+  ls('fleet_extras_backup_before_empresa_v1', { savedAt: backupStamp, extras: prevExtras });
+  syncToSupabase('fleet_edits_backup_before_empresa_v1', { savedAt: backupStamp, edits: prevEdits });
+  syncToSupabase('fleet_extras_backup_before_empresa_v1', { savedAt: backupStamp, extras: prevExtras });
+
   ALL_VEHICLES = empParsed;
   edits = {};
   meta  = { week: 'Sem ' + weekNum + ' · ' + year, date: new Date().toLocaleDateString('pt-PT'), weekNum, year };
@@ -4396,6 +4462,9 @@ async function applyEmpresaFile() {
   ls(K_VEHICLES, ALL_VEHICLES);
   ls(K_META, meta);
   ls(K_EDITS, {});
+  ls(K_EXTRAS, []);
+  await syncToSupabase(K_EDITS, {});
+  await syncToSupabase(K_EXTRAS, []);
 
   document.getElementById('week-badge').textContent = meta.week; const cmb=document.getElementById('cmb-week-badge'); if(cmb) cmb.textContent=meta.week;
   upBadge(); renderAll();
@@ -4803,4 +4872,3 @@ async function kmsfMobileGuardar(mat) {
 
 </script>
 </body></html>
-
