@@ -9,7 +9,7 @@
 :root{
   --bg:#0d0f12;--surface:#13161b;--surface2:#1a1e25;--surface3:#20252e;
   --border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.12);
-  --text:#e8eaf0;--muted:#6b7280;--hint:#2d3748;
+  --text:#e8eaf0;--muted:#8b95a7;--hint:#596579;
   --blue:#3b82f6;--blue-dim:rgba(59,130,246,0.12);
   --green:#22c55e;--green-dim:rgba(34,197,94,0.11);
   --amber:#f59e0b;--amber-dim:rgba(245,158,11,0.11);
@@ -79,6 +79,14 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .week-badge{font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);background:var(--surface2);border:1px solid var(--border2);padding:3px 10px;border-radius:99px}
 .region-badge{font-size:11px;color:#5eead4;background:var(--teal-dim);border:1px solid rgba(20,184,166,.25);padding:3px 10px;border-radius:99px;font-weight:500}
 .save-ind{font-size:11px;color:var(--green);font-family:'DM Mono',monospace;display:none}
+.data-state{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin:-.45rem 0 1rem}
+.data-chip{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:9px 11px;min-height:52px}
+.data-chip.warn{border-color:rgba(245,158,11,.35);background:var(--amber-dim)}
+.data-chip.danger{border-color:rgba(239,68,68,.35);background:var(--red-dim)}
+.data-chip.good{border-color:rgba(34,197,94,.28);background:var(--green-dim)}
+.data-chip-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}
+.data-chip-main{font-size:13px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.data-chip-sub{font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .btn-sm{background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:12px;padding:5px 11px;cursor:pointer;transition:all .2s}
 .btn-sm:hover{border-color:var(--blue);color:var(--blue)}
 .btn-amber{background:var(--amber-dim);border:1px solid rgba(245,158,11,.35);color:#fcd34d;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:12px;padding:5px 11px;cursor:pointer;font-weight:500;transition:all .2s}
@@ -98,7 +106,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .kpi-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden;margin-bottom:1.25rem}
 .kpi{background:var(--surface);padding:13px 14px;text-align:center}
 .kv{font-size:24px;font-weight:600;letter-spacing:-.5px;font-family:'DM Mono',monospace}
-.kl{font-size:10px;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
+.kl{font-size:11px;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
 .c-blue{color:var(--blue)}.c-green{color:var(--green)}.c-amber{color:var(--amber)}.c-red{color:var(--red)}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:1.25rem;margin-bottom:1rem}
@@ -505,6 +513,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <button class="rfilt" onclick="setRegion(this,'PDTN')">PDTN</button>
       <button class="rfilt" onclick="setRegion(this,'ALL')">Toda a frota</button>
     </div>
+    <div class="data-state" id="data-state"></div>
     <div class="kpi-strip">
       <div class="kpi"><div class="kv c-blue" id="k-total">—</div><div class="kl">Total frota</div></div>
       <div class="kpi"><div class="kv c-amber" id="k-oficina">—</div><div class="kl">Oficina</div></div>
@@ -532,7 +541,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
         <span class="vcount-b" id="vcount">—</span>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:.75rem;flex-wrap:wrap;align-items:center">
-        <input class="sinput" type="text" id="vsearch" placeholder="Pesquisar matrícula..." oninput="renderVehicles()" style="margin-bottom:0;flex:1;min-width:160px">
+        <input class="sinput" type="text" id="vsearch" placeholder="Pesquisar matrícula, reboque, notas..." oninput="renderVehicles()" style="margin-bottom:0;flex:1;min-width:160px">
         <select id="transp-filter" onchange="renderVehicles()" style="background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:7px 10px;outline:none;cursor:pointer">
           <option value="all">Todos os transportadores</option>
         </select>
@@ -699,7 +708,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
         <button class="cmb-btn cmb-save" onclick="saveWeek()">💾 Guardar</button>
       </div>
     </div>
-    <input class="campo-search" id="campo-search" type="text" placeholder="🔍  Pesquisar matrícula..." oninput="renderCampo()">
+    <input class="campo-search" id="campo-search" type="text" placeholder="🔍  Matrícula, reboque, notas..." oninput="renderCampo()">
     <div class="campo-filters">
       <button class="cfilt on" onclick="setCampoFilt(this,'problemas')">⚠️ Problemas</button>
       <button class="cfilt" onclick="setCampoFilt(this,'rever_gps')">📡 REVER GPS</button>
@@ -1089,6 +1098,56 @@ function updateSyncDot() {
   } else {
     dot.style.display = 'none';
   }
+  renderDataState();
+}
+
+function fmtDateTime(iso) {
+  if (!iso) return 'sem registo';
+  try { return new Date(iso).toLocaleString('pt-PT', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }); }
+  catch(e) { return 'sem registo'; }
+}
+
+function countManualEdits() {
+  return Object.values(edits || {}).filter(e => e && Object.keys(e).some(k => {
+    const v = e[k];
+    return v !== undefined && v !== null && String(v).trim() !== '';
+  })).length;
+}
+
+function renderDataState() {
+  const el = document.getElementById('data-state');
+  if (!el) return;
+  const localTotal = ALL_VEHICLES.length;
+  const cloudTotal = Number(meta.cloudTotal || 0);
+  const hasCloudTotal = cloudTotal > 0;
+  const diff = hasCloudTotal ? localTotal - cloudTotal : 0;
+  const pending = Object.keys(_pendingSync || {}).length;
+  const dirty = !!ls(K_LOCAL_DIRTY);
+  const manual = countManualEdits();
+  const sourceClass = pending || dirty ? 'warn' : _offlineMode ? 'danger' : 'good';
+  const diffClass = !hasCloudTotal ? '' : diff === 0 ? 'good' : 'warn';
+  const diffText = !hasCloudTotal ? 'Sem comparação cloud' : diff === 0 ? 'Local bate certo com cloud' : `Diferença ${diff > 0 ? '+' : ''}${diff}`;
+  el.innerHTML = `
+    <div class="data-chip ${sourceClass}">
+      <div class="data-chip-label">Estado dos dados</div>
+      <div class="data-chip-main">${_offlineMode ? 'Offline' : pending ? 'Por sincronizar' : dirty ? 'Base local' : 'Cloud sincronizada'}</div>
+      <div class="data-chip-sub">${pending ? pending + ' alteração' + (pending > 1 ? 'es' : '') + ' pendente' : dirty ? 'guarda/sincroniza para enviar' : 'última leitura ' + fmtDateTime(meta.cloudLoadedAt)}</div>
+    </div>
+    <div class="data-chip ${diffClass}">
+      <div class="data-chip-label">Total frota</div>
+      <div class="data-chip-main">Local ${localTotal}${hasCloudTotal ? ' · Cloud ' + cloudTotal : ''}</div>
+      <div class="data-chip-sub">${diffText}</div>
+    </div>
+    <div class="data-chip ${manual ? 'warn' : ''}">
+      <div class="data-chip-label">Alterações manuais</div>
+      <div class="data-chip-main">${manual} viatura${manual === 1 ? '' : 's'}</div>
+      <div class="data-chip-sub">${manual ? 'preservadas por matrícula' : 'sem edições manuais ativas'}</div>
+    </div>
+    <div class="data-chip">
+      <div class="data-chip-label">Semana ativa</div>
+      <div class="data-chip-main">${meta.week || '—'}</div>
+      <div class="data-chip-sub">${meta.date || 'sem data'}</div>
+    </div>`;
 }
 
 // Avisar antes de fechar se houver pendências por guardar
@@ -1106,7 +1165,7 @@ async function loadFromSupabase() {
     const r1 = await sb.from('fleet_weekly').select('week_num,year,date,vehicles').order('year',{ascending:false}).order('week_num',{ascending:false}).limit(1);
     if (!r1.error && r1.data && r1.data.length > 0) {
       const w = r1.data[0];
-      const nm = {week:'Sem '+w.week_num+' · '+w.year, date:w.date, weekNum:w.week_num, year:w.year};
+      const nm = {week:'Sem '+w.week_num+' · '+w.year, date:w.date, weekNum:w.week_num, year:w.year, cloudTotal:(w.vehicles || []).length, cloudLoadedAt:new Date().toISOString()};
       const lm = JSON.parse(localStorage.getItem('fleet_meta_v2')||'null')||{};
       // Merge inteligente: preservar reboque/notes/tipoGalera local se a cloud não os tiver
       const cloudVehicles = w.vehicles || [];
@@ -1291,7 +1350,9 @@ async function saveWeekToSupabase(wn, yr) {
     if (btn) { btn.textContent = 'Guardado!'; btn.style.background = 'var(--green)'; }
     showSync('Sem '+wn+' guardada!', '#22c55e');
     await syncToSupabase(K_VEHICLES, ALL_VEHICLES);
-    await syncToSupabase(K_META, {week:'Sem '+wn+' · '+yr,date:today,weekNum:wn,year:yr});
+    meta = {...meta, week:'Sem '+wn+' · '+yr, date:today, weekNum:wn, year:yr, cloudTotal:ALL_VEHICLES.length, cloudLoadedAt:new Date().toISOString()};
+    ls(K_META, meta);
+    await syncToSupabase(K_META, meta);
     await syncToSupabase(K_EXTRAS, getExtras());
     await syncToSupabase(K_INTERNAL, saveInternal());
     ls(K_LOCAL_DIRTY, false);
@@ -2184,6 +2245,33 @@ function norm(s) { return String(s||'').toUpperCase().replace(/-/g,'').replace(/
 // Chave canónica de um veículo para edits mat-based
 function eKey(v) { return norm((v&&(v.mat||v.plate))||''); }
 
+function fixText(s) {
+  if (s === undefined || s === null) return '';
+  let t = String(s);
+  const repl = {
+    'Ã¡':'á','ÃÁ':'Á','Ãà':'à','Ã€':'À','Ã¢':'â','Ã‚':'Â','Ã£':'ã',
+    'Ã©':'é','Ã‰':'É','Ãª':'ê','ÃŠ':'Ê','Ãí':'í','Ã':'Í',
+    'Ã³':'ó','Ã“':'Ó','Ãµ':'õ','Ã•':'Õ','Ãº':'ú','Ãš':'Ú',
+    'Ã§':'ç','Ã‡':'Ç','Âº':'º','Âª':'ª','Â·':'·','â€™':"'",'â€“':'-','â€”':'-'
+  };
+  Object.keys(repl).forEach(k => { t = t.split(k).join(repl[k]); });
+  return t
+    .replace(/liga��o/gi, 'ligação')
+    .replace(/liga��es/gi, 'ligações')
+    .replace(/alimenta��o/gi, 'alimentação')
+    .replace(/corre��o/gi, 'correção')
+    .replace(/instala��o/gi, 'instalação')
+    .replace(/comunica��o/gi, 'comunicação')
+    .replace(/atualiza��o/gi, 'atualização')
+    .replace(/manuten��o/gi, 'manutenção')
+    .replace(/tens�o/gi, 'tensão')
+    .replace(/ve�culo/gi, 'veículo')
+    .replace(/matr�cula/gi, 'matrícula')
+    .replace(/t�rmic/gi, 'térmic')
+    .replace(/isot�rmic/gi, 'isotérmic')
+    .replace(/n�/gi, 'nº');
+}
+
 // Migra edits antigos (por posição 0,1,2…) para edits por matrícula
 function migrateEditsIfNeeded() {
   if (!ALL_VEHICLES.length) return;
@@ -2203,7 +2291,7 @@ function migrateEditsIfNeeded() {
 function getWeekNum(d) { d=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())); d.setUTCDate(d.getUTCDate()+4-(d.getUTCDay()||7)); return Math.ceil((((d-new Date(Date.UTC(d.getUTCFullYear(),0,1)))/86400000)+1)/7); }
 function getEff(v,i) {
   const e=edits[eKey(v)] ?? edits[i] ?? null;
-  if(!e)return v;
+  if(!e)return {...v,obs:fixText(v.obs),notes:fixText(v.notes||''),tipo:fixText(v.tipo)};
   const msgGPS  = e.gps!==undefined   ? e.gps   : v.msgGPS;
   const msgPorta= e.porta!==undefined ? e.porta : v.msgPorta;
   const msgTemp = e.temp!==undefined  ? e.temp  : v.msgTemp;
@@ -2225,7 +2313,7 @@ function getEff(v,i) {
     if (e.porta!==undefined) portaOK = (e.porta==='' || e.porta==='Porta OK');
     if (e.temp!==undefined)  tempOK  = (e.temp==='' || e.temp==='Temp OK');
   }
-  return{...v,obs,msgGPS,msgPorta,msgTemp,gpsOK,portaOK,tempOK,notes:e.notes!==undefined?e.notes:v.notes||'',tipo:e.galera?e.galera:v.tipo};
+  return{...v,obs:fixText(obs),msgGPS,msgPorta,msgTemp,gpsOK,portaOK,tempOK,notes:fixText(e.notes!==undefined?e.notes:v.notes||''),tipo:fixText(e.galera?e.galera:v.tipo)};
 }
 // Regras de equipamento por tipo de galera:
 // Regras de equipamento por tipo (ver _tipoSemPorta/_tipoSemTemp definidos acima)
@@ -2256,7 +2344,7 @@ function switchMobileTab(id, btn) {
   if (id === 'campo') renderCampo();
   if (id === 'kmsf') { renderKmsf(); renderKmsfMobile(); }
 }
-function renderAll() { renderKPIs(); renderSysBars(); renderFleetActions(); renderTransporters(); renderVehicles(); if(document.getElementById('page-campo')?.classList.contains('active'))renderCampo(); }
+function renderAll() { renderDataState(); renderKPIs(); renderSysBars(); renderFleetActions(); renderTransporters(); renderVehicles(); if(document.getElementById('page-campo')?.classList.contains('active'))renderCampo(); }
 
 // ── RENDERS ───────────────────────────────────────────────────────────────────
 function renderKPIs() {
@@ -2399,7 +2487,11 @@ function renderVehicles() {
   else if(f==='removida') idx=idx.filter(i=>eff[i].obs==='Removida');
   else if(f==='editados') idx=idx.filter(i=>!!edits[eKey(ALL_VEHICLES[i])]);
   else if(f==='ok') idx=idx.filter(i=>{const v=eff[i];return!v.status&&!v.obs&&!v.msgGPS&&!v.msgPorta&&!v.msgTemp;});
-  if(q) idx=idx.filter(i=>{const v=eff[i];return(v.mat+v.plate+v.transp+v.regiao+(v.reboque||'')).toLowerCase().includes(q);});
+  if(q) idx=idx.filter(i=>{
+    const v=eff[i];
+    return [v.mat,v.plate,v.transp,v.regiao,v.tipo,v.reboque,v.notes,v.obs,v.msgGPS,v.msgPorta,v.msgTemp]
+      .filter(Boolean).join(' ').toLowerCase().includes(q);
+  });
   idx.sort((a,b)=>{
     const va=eff[a], vb=eff[b];
     const sc=v=>v.msgGPS==='Instalar GPS'?0:v.msgGPS==='REVER GPS'?1:v.msgPorta||v.msgTemp||v.msgVolt?2:v.obs==='Sinistro'?3:v.obs==='Oficina'?4:5;
@@ -4024,7 +4116,8 @@ function renderCampo() {
   else if (campoFilt === 'oficina')vs = vs.filter(v => v.obs === 'Oficina' || v.obs === 'Sinistro');
 
   // filtro de pesquisa
-  if (search) vs = vs.filter(v => (v.plate || v.mat || '').toLowerCase().includes(search) || (v.transp || '').toLowerCase().includes(search));
+  if (search) vs = vs.filter(v => [v.plate,v.mat,v.transp,v.regiao,v.tipo,v.reboque,v.notes,v.obs,v.msgGPS,v.msgPorta,v.msgTemp]
+    .filter(Boolean).join(' ').toLowerCase().includes(search));
 
   // ordenar: Instalar GPS primeiro, depois REVER GPS, depois porta/temp
   vs.sort((a, b) => {
