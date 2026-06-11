@@ -1169,6 +1169,18 @@ async function loadFromSupabase() {
   } catch(e) { console.warn('load error', e); showSync('Offline', '#f59e0b'); return false; }
 }
 async function forceSyncFromCloud() {
+  if (ls(K_LOCAL_DIRTY) && ALL_VEHICLES.length) {
+    const msg = 'Tens uma base carregada localmente que ainda não foi guardada na cloud.\n\nOK = guardar esta base local na cloud agora.\nCancelar = não sincronizar para não perder dados.';
+    if (confirm(msg)) {
+      const wn = meta.weekNum || getWeekNum(new Date());
+      const yr = meta.year || new Date().getFullYear();
+      await saveWeekToSupabase(wn, yr);
+      showSync('Base local guardada na cloud', '#22c55e');
+    } else {
+      showSync('Sincronização cancelada: dados locais preservados', '#f59e0b');
+    }
+    return;
+  }
   showSync('A sincronizar...', '#93c5fd');
   const ok = await loadFromSupabase();
   if (ok) {
@@ -1200,6 +1212,7 @@ async function saveWeekToSupabase(wn, yr) {
     await syncToSupabase(K_VEHICLES, ALL_VEHICLES);
     await syncToSupabase(K_META, {week:'Sem '+wn+' · '+yr,date:today,weekNum:wn,year:yr});
     await syncToSupabase(K_EXTRAS, getExtras());
+    ls(K_LOCAL_DIRTY, false);
     setTimeout(function() { if(btn){btn.textContent=orig;btn.style.background='';btn.disabled=false;} }, 3000);
   } catch(err) {
     console.error(err); if(btn){btn.textContent=orig;btn.disabled=false;}
@@ -1250,6 +1263,7 @@ const K_META      = 'fleet_meta_v2';
 const K_HISTORY   = 'fleet_history_v2';
 const K_OFICINAS  = 'fleet_oficinas_v2'; // staged oficina lookups
 const K_EXTRAS    = 'fleet_extras_v1';    // viaturas adicionadas manualmente
+const K_LOCAL_DIRTY = 'fleet_local_dirty_v1'; // existe base local ainda não enviada para a cloud
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
 let ALL_VEHICLES = [];
@@ -1944,6 +1958,7 @@ function startDashboard() {
   ls(K_VEHICLES, ALL_VEHICLES);
   ls(K_EDITS, edits);
   ls(K_META, meta);
+  ls(K_LOCAL_DIRTY, true);
 
   openDashboard();
 }
