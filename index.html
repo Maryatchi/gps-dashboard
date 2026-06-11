@@ -1133,6 +1133,20 @@ async function loadFromSupabase() {
       showSync('Sem '+w.week_num+' carregada', '#22c55e');
     }
     const r2 = await sb.from('fleet_state').select('key,value');
+    if (!r2.error && r2.data) {
+      const resetRow = r2.data.find(r => r.key === K_CLOUD_RESET);
+      if (resetRow && resetRow.value) {
+        const cloudReset = JSON.stringify(resetRow.value);
+        const localReset = localStorage.getItem(K_CLOUD_RESET);
+        if (cloudReset !== localReset) {
+          localStorage.removeItem(K_EDITS);
+          localStorage.removeItem(K_EXTRAS);
+          localStorage.setItem(K_CLOUD_RESET, cloudReset);
+          localStorage.setItem(K_LOCAL_DIRTY, JSON.stringify(false));
+          edits = {};
+        }
+      }
+    }
     if (!r2.error && r2.data) r2.data.forEach(function(row) {
       if (row.value === null) return;
       // Registos: merge inteligente — preservar resolved:true local mesmo após sync
@@ -1326,6 +1340,7 @@ const K_OFICINAS  = 'fleet_oficinas_v2'; // staged oficina lookups
 const K_EXTRAS    = 'fleet_extras_v1';    // viaturas adicionadas manualmente
 const K_LOCAL_DIRTY = 'fleet_local_dirty_v1'; // existe base local ainda não enviada para a cloud
 const K_INTERNAL    = 'fleet_internal_v2';    // dados internos permanentes: reboque, notes, tipoGalera por matrícula
+const K_CLOUD_RESET = 'fleet_cloud_reset_v1'; // marcador cloud para limpar edits/extras locais antigos uma vez
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
 let ALL_VEHICLES = [];
