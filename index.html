@@ -1769,9 +1769,10 @@ function resolveConflict(ci, choice) {
   if (!c) return;
   if (choice === 'theirs') {
     // Aceitar os dados da empresa — remover os campos em conflito do edit
-    const e = edits[c.idx] || {};
+    const editKey = eKey(ALL_VEHICLES[c.idx]) || c.idx;
+    const e = edits[editKey] || {};
     c.diffs.forEach(d => { delete e[d.k]; });
-    if (Object.keys(e).length === 0) delete edits[c.idx]; else edits[c.idx] = e;
+    if (Object.keys(e).length === 0) delete edits[editKey]; else edits[editKey] = e;
   }
   // se 'mine', não faz nada (o edit já está aplicado)
   const row = document.getElementById('conflict-row-' + ci);
@@ -3436,7 +3437,7 @@ function exportListaFiltrada() {
   else if(f==='removida') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).obs==='Removida');
   else if(f==='editados') idx=idx.filter(i=>!!edits[eKey(ALL_VEHICLES[i])]);
   else if(f==='ok') idx=idx.filter(i=>{const v=getEff(ALL_VEHICLES[i],i);return!v.status&&!v.obs&&!v.msgGPS&&!v.msgPorta&&!v.msgTemp;});
-  if(q) idx=idx.filter(i=>{const v=getEff(ALL_VEHICLES[i],i);return(v.mat+v.plate+v.transp+v.regiao).toLowerCase().includes(q);});
+  if(q) idx=idx.filter(i=>{const v=getEff(ALL_VEHICLES[i],i);return(v.mat+v.plate+v.transp+v.regiao+(v.reboque||'')).toLowerCase().includes(q);});
 
   if(!idx.length){alert('Nenhum veículo na lista actual para exportar.');return;}
 
@@ -3752,10 +3753,11 @@ function resolveRegisto(idx) {
     const vIdx = ALL_VEHICLES.findIndex(v => norm(v.mat)===mn || norm(v.plate)===mn);
     if (vIdx >= 0) {
       // Remove the override so original Base JSON problems reappear
-      const e = edits[vIdx] || {};
+      const ek = eKey(ALL_VEHICLES[vIdx]);
+      const e = edits[ek] || {};
       delete e.gps; delete e.porta; delete e.temp;
       if (e.obs === 'Resolvido') delete e.obs;
-      edits[vIdx] = e;
+      if (Object.keys(e).length === 0) delete edits[ek]; else edits[ek] = e;
       upBadge(); renderAll();
     }
     renderRegistos();
@@ -3775,8 +3777,9 @@ function resolveRegisto(idx) {
   const mn = norm(r.mat);
   const vIdx = ALL_VEHICLES.findIndex(v => norm(v.mat)===mn || norm(v.plate)===mn);
   if (vIdx >= 0) {
-    edits[vIdx] = {
-      ...(edits[vIdx]||{}),
+    const ek = eKey(ALL_VEHICLES[vIdx]);
+    edits[ek] = {
+      ...(edits[ek]||{}),
       gps:   '',
       porta: '',
       temp:  '',
