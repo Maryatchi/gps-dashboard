@@ -1755,6 +1755,8 @@ function loadBase(file) {
         msgTemp: str(r['MsgTemp']||''),
         msgVolt: str(r['MsgVolt']||''),
         status:  str(r['Status']||''),
+        reboque: str(pick(r, ['Reboque','Nº Reboque','N. Reboque','Nº Reb.','N. Reb.','reboque'])),
+        notes:   str(pick(r, ['Notas','Notes','notes'])),
         gpsOK:   toBool(r['GpsOK']||r['GPS_OK']),
         portaOK: toBool(r['PortaOK']||r['PORTA_OK']),
         tempOK:  toBool(r['TemperaturasOK']||r['TEMPERATURAS_OK']),
@@ -2553,7 +2555,8 @@ function exportFormatoEmpresa() {
   // Cabeçalhos exatamente como loadBase os espera
   const headers = ['Matricula','licensePlate','TipoVeiculo','Transportador','Região',
     'Observações','MsgGPS','MsgPorta','MsgTemp','MsgVolt','Status',
-    'GpsOK','PortaOK','TemperaturasOK','TacografoOK','CanBusOK','VoltageOK'];
+    'GpsOK','PortaOK','TemperaturasOK','TacografoOK','CanBusOK','VoltageOK',
+    'Reboque','Notas'];
 
   const rows = ALL_VEHICLES.map((v, i) => {
     const ev = getEff(v, i); // estado efetivo = dados base + as tuas correções
@@ -2580,12 +2583,14 @@ function exportFormatoEmpresa() {
       bool(tacoApplies && ev.tacoOK),
       bool(canbusApplies && ev.canbusOK),
       bool(ev.voltOK),
+      ev.reboque || '',
+      ev.notes || '',
     ];
   });
 
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-  ws['!cols'] = [{wch:14},{wch:12},{wch:11},{wch:13},{wch:8},{wch:14},{wch:14},{wch:14},{wch:14},{wch:14},{wch:10},{wch:8},{wch:9},{wch:15},{wch:12},{wch:10},{wch:10}];
+  ws['!cols'] = [{wch:14},{wch:12},{wch:11},{wch:13},{wch:8},{wch:14},{wch:14},{wch:14},{wch:14},{wch:14},{wch:10},{wch:8},{wch:9},{wch:15},{wch:12},{wch:10},{wch:10},{wch:14},{wch:28}];
   // Nome de sheet "auxDados" para ser reconhecido por loadBase no futuro
   XLSX.utils.book_append_sheet(wb, ws, 'auxDados');
   XLSX.writeFile(wb, `Base_FormatoEmpresa_Sem${meta.weekNum}_${meta.year}.xlsx`);
@@ -4405,11 +4410,15 @@ function parseEmpresaFiles() {
     const empRow = allRows[mat];
     if (!['Norte','PDTN'].includes(empRow.regiao)) continue;
     const existing = existingByMat[mat] || existingByMat[norm(empRow.plate || '')] || {};
+    const isSpecificGalera = ['Frio','Lona','Iso'].includes(existing.tipo || '');
+    const tipoFinal = (isSpecificGalera && (!empRow.tipo || empRow.tipo === 'Galera'))
+      ? existing.tipo
+      : (empRow.tipo || existing.tipo || '');
     result.push({
       ...existing,
       mat:      empRow.mat || existing.mat || mat,
       plate:    empRow.plate || existing.plate || '',
-      tipo:     empRow.tipo || existing.tipo || '',
+      tipo:     tipoFinal,
       transp:   empRow.transp || existing.transp || '',
       regiao:   empRow.regiao || existing.regiao || '',
       obs:      empRow.obs || '',
