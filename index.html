@@ -499,6 +499,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     <button class="tab-btn" onclick="switchTab('registos',this)">📋 Registos</button>
     <button class="tab-btn" onclick="switchTab('plano',this)">🗓️ Planeamento</button>
     <button class="tab-btn" onclick="switchTab('campo',this)">📱 Campo</button>
+    <button class="tab-btn" onclick="switchTab('inofleet',this)">🛰️ Inofleet Live</button>
     <button class="tab-btn" onclick="switchTab('gerar',this)">⚙️ Gerar Base JSON</button>
     <button class="tab-btn" onclick="switchTab('kmsf',this)">🌡️ Kms & Frio</button>
   </div>
@@ -721,6 +722,47 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     <div class="campo-summary" id="campo-summary"></div>
     <div class="campo-count" id="campo-count"></div>
     <div class="campo-list" id="campo-list"></div>
+  </div>
+
+  <!-- INOFLEET LIVE TESTE -->
+  <div class="tab-page" id="page-inofleet">
+    <div style="max-width:1300px;margin:0 auto">
+      <div class="card" style="border-color:rgba(59,130,246,.25);background:var(--blue-dim)">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+          <div>
+            <div style="font-size:15px;font-weight:700;margin-bottom:3px">🛰️ Inofleet Live — modo teste</div>
+            <div style="font-size:12px;color:var(--muted);line-height:1.6">Compara a grelha live do Inofleet com a dashboard. Não altera frota, não apaga edits, não grava por cima da base.</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn-blue" onclick="document.getElementById('inofleet-json-file').click()">📂 Carregar JSON teste</button>
+            <button class="btn-sm" onclick="clearInofleetLive()">Limpar teste</button>
+            <input type="file" id="inofleet-json-file" accept=".json" style="display:none" onchange="loadInofleetLiveFile(this.files[0])">
+          </div>
+        </div>
+      </div>
+      <div class="data-state" id="inofleet-summary"></div>
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:1rem">
+          <div class="card-title" style="margin:0">Comparação live</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input class="sinput" id="inofleet-search" placeholder="Pesquisar matrícula, estado..." oninput="renderInofleetLive()" style="margin-bottom:0;min-width:220px">
+            <select id="inofleet-filter" onchange="renderInofleetLive()" style="background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:7px 10px;outline:none">
+              <option value="all">Todos</option>
+              <option value="action">Com ação sugerida</option>
+              <option value="missing">Não aparecem no Inofleet</option>
+              <option value="gps">REVER GPS live</option>
+              <option value="porta">Porta/sensor</option>
+            </select>
+          </div>
+        </div>
+        <div style="overflow:auto;max-height:560px;border:1px solid var(--border);border-radius:var(--rl)">
+          <table class="data-table">
+            <thead><tr><th>Matrícula</th><th>App</th><th>Inofleet</th><th>Último sinal</th><th>Vel.</th><th>Ignição</th><th>Porta</th><th>Temp</th><th>Ação teste</th></tr></thead>
+            <tbody id="inofleet-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- GERAR BASE JSON -->
@@ -1419,6 +1461,7 @@ const K_EXTRAS    = 'fleet_extras_v1';    // viaturas adicionadas manualmente
 const K_LOCAL_DIRTY = 'fleet_local_dirty_v1'; // existe base local ainda não enviada para a cloud
 const K_INTERNAL    = 'fleet_internal_v2';    // dados internos permanentes: reboque, notes, tipoGalera por matrícula
 const K_CLOUD_RESET = 'fleet_cloud_reset_v1'; // marcador cloud para limpar edits/extras locais antigos uma vez
+const K_INOFLEET_LIVE = 'fleet_inofleet_live_test_v1'; // overlay de teste, nunca altera a frota
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
 let ALL_VEHICLES = [];
@@ -2350,7 +2393,7 @@ function upBadge() {
 
 function setRegion(btn,r) { currentRegion=r; document.querySelectorAll('.rfilt').forEach(b=>b.classList.remove('on')); btn.classList.add('on'); renderAll(); }
 function setVFilt(btn,f)  { currentVFilt=f;  document.querySelectorAll('.vfilt').forEach(b=>b.classList.remove('on')); btn.classList.add('on'); renderVehicles(); }
-function switchTab(id,btn) { document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); document.querySelectorAll('.tab-page').forEach(p=>p.classList.remove('active')); btn.classList.add('active'); document.getElementById('page-'+id).classList.add('active'); if(id==='trend')renderTrend(); if(id==='campo')renderCampo(); if(id==='kmsf'){renderKmsf();renderKmsfMobile();} }
+function switchTab(id,btn) { document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); document.querySelectorAll('.tab-page').forEach(p=>p.classList.remove('active')); btn.classList.add('active'); document.getElementById('page-'+id).classList.add('active'); if(id==='trend')renderTrend(); if(id==='campo')renderCampo(); if(id==='inofleet')renderInofleetLive(); if(id==='kmsf'){renderKmsf();renderKmsfMobile();} }
 function switchMobileTab(id, btn) {
   document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -2360,7 +2403,7 @@ function switchMobileTab(id, btn) {
   if (id === 'campo') renderCampo();
   if (id === 'kmsf') { renderKmsf(); renderKmsfMobile(); }
 }
-function renderAll() { renderDataState(); renderKPIs(); renderSysBars(); renderFleetActions(); renderTransporters(); renderVehicles(); if(document.getElementById('page-campo')?.classList.contains('active'))renderCampo(); }
+function renderAll() { renderDataState(); renderKPIs(); renderSysBars(); renderFleetActions(); renderTransporters(); renderVehicles(); if(document.getElementById('page-campo')?.classList.contains('active'))renderCampo(); if(document.getElementById('page-inofleet')?.classList.contains('active'))renderInofleetLive(); }
 
 // ── RENDERS ───────────────────────────────────────────────────────────────────
 function renderKPIs() {
@@ -3544,6 +3587,153 @@ async function generateFromCurrent() {
   document.getElementById('gen-compare').style.display = 'none';
 }
 
+
+// ── INOFLEET LIVE TESTE ───────────────────────────────────────────────────────
+function stripHtmlText(v) {
+  if (v === undefined || v === null) return '';
+  const s = String(v);
+  if (!/[<>]/.test(s)) return fixText(s).trim();
+  const d = document.createElement('div');
+  d.innerHTML = s;
+  return fixText((d.innerText || d.textContent || '').replace(/\s+/g,' ').trim());
+}
+
+function parseInofleetDate(v) {
+  if (!v) return null;
+  if (v instanceof Date) return v;
+  const s = String(v).trim();
+  const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4}),?\s+(\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (m) return new Date(+m[3], +m[2]-1, +m[1], +m[4], +m[5], +(m[6]||0));
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
+}
+
+function normalizeInofleetRow(r) {
+  const get = (...ks) => {
+    for (const k of ks) if (r && r[k] !== undefined && r[k] !== null && String(r[k]).trim() !== '') return r[k];
+    return '';
+  };
+  const plate = get('license','Matrícula','matricula','Nome','name');
+  const dt = parseInofleetDate(get('date','Data'));
+  const speedRaw = get('speed','Velocidade');
+  const speed = typeof speedRaw === 'number' ? speedRaw : parseFloat(String(speedRaw).replace(',','.')) || 0;
+  return {
+    plate: norm(plate),
+    plateLabel: String(plate || '').trim(),
+    rawDate: get('date','Data'),
+    date: dt ? dt.toISOString() : '',
+    description: stripHtmlText(get('description','Descrição')),
+    group: stripHtmlText(get('groupname','Grupo')),
+    address: stripHtmlText(get('address','Morada')),
+    locality: stripHtmlText(get('locality','Localidade')),
+    city: stripHtmlText(get('city','Cidade')),
+    nearest: stripHtmlText(get('nearestmarker','Marco mais próximo')),
+    speed,
+    ignition: stripHtmlText(get('ignition','Ignição')),
+    state: stripHtmlText(get('state','Estado')),
+    port1: stripHtmlText(get('port1','Porta digital 1')),
+    port2: stripHtmlText(get('port2','Porta digital 2')),
+    temp1: stripHtmlText(get('temp1','Sensor temperatura 1')),
+    temp2: stripHtmlText(get('temp2','Sensor temperatura 2')),
+    totalKms: get('totalKms','Total Kms')
+  };
+}
+
+function loadInofleetLiveFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const parsed = JSON.parse(e.target.result);
+      const rows = Array.isArray(parsed) ? parsed : (parsed.rows || parsed.data || []);
+      if (!Array.isArray(rows) || !rows.length) throw new Error('JSON sem linhas.');
+      const normRows = rows.map(normalizeInofleetRow).filter(r => r.plate);
+      ls(K_INOFLEET_LIVE, { updatedAt:new Date().toISOString(), source:file.name, rows:normRows });
+      showSync('Inofleet live carregado em modo teste', '#93c5fd');
+      renderInofleetLive();
+    } catch(err) {
+      alert('Erro ao ler JSON Inofleet: ' + err.message);
+    }
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+function clearInofleetLive() {
+  localStorage.removeItem(K_INOFLEET_LIVE);
+  renderInofleetLive();
+}
+
+function inofleetLiveStatus(live, thresholdDays) {
+  if (!live) return { gps:'Sem linha Inofleet', cls:'p-red', days:null, hours:null };
+  const dt = parseInofleetDate(live.date || live.rawDate);
+  if (!dt) return { gps:'Sem data', cls:'p-amber', days:null, hours:null };
+  const diffH = Math.max(0, (Date.now() - dt.getTime()) / 36e5);
+  const days = Math.floor(diffH / 24);
+  const ok = diffH <= thresholdDays * 24;
+  return { gps: ok ? 'GPS OK live' : 'REVER GPS live', cls: ok ? 'p-green' : 'p-amber', days, hours:diffH };
+}
+
+function renderInofleetLive() {
+  const data = ls(K_INOFLEET_LIVE);
+  const sum = document.getElementById('inofleet-summary');
+  const body = document.getElementById('inofleet-body');
+  if (!sum || !body) return;
+  if (!data || !Array.isArray(data.rows) || !data.rows.length) {
+    sum.innerHTML = `<div class="data-chip warn"><div class="data-chip-label">Modo teste</div><div class="data-chip-main">Sem dados Inofleet</div><div class="data-chip-sub">carrega um JSON extraído da grelha</div></div>`;
+    body.innerHTML = `<tr><td colspan="9" class="no-data">Sem dados Inofleet carregados. A base da app não foi alterada.</td></tr>`;
+    return;
+  }
+  const liveByPlate = {};
+  data.rows.forEach(r => { if (r.plate) liveByPlate[r.plate] = r; });
+  const threshold = Math.max(1, parseInt(document.getElementById('gen-threshold')?.value || '3') || 3);
+  const fleet = ALL_VEHICLES.map((v,i)=>getEff(v,i)).filter(v=>regMatch(v) && v.obs !== 'Removida');
+  const rows = fleet.map(v => {
+    const plate = norm(v.mat || v.plate);
+    const live = liveByPlate[plate];
+    const st = inofleetLiveStatus(live, threshold);
+    const port = live ? [live.port1, live.port2].filter(Boolean).join(' / ') : '';
+    const temp = live ? [live.temp1, live.temp2].filter(Boolean).join(' / ') : '';
+    let action = '';
+    if (!live) action = 'Validar: não aparece no Inofleet';
+    else if (v.msgGPS === 'Instalar GPS') action = 'Tem sinal no Inofleet: rever Instalar GPS';
+    else if (['Resolvido','Aguardar'].includes(v.obs) && st.gps === 'REVER GPS live') action = 'Reabriria GPS';
+    else if (st.gps === 'REVER GPS live' && !v.msgGPS) action = 'Novo REVER GPS';
+    else if (/Aberta|Desligado/i.test(port) && hasPorta(v)) action = 'Rever porta/sensor';
+    return { v, live, st, port, temp, action };
+  });
+  const q = (document.getElementById('inofleet-search')?.value || '').toLowerCase();
+  const f = document.getElementById('inofleet-filter')?.value || 'all';
+  let shown = rows;
+  if (f === 'action') shown = shown.filter(r => r.action);
+  else if (f === 'missing') shown = shown.filter(r => !r.live);
+  else if (f === 'gps') shown = shown.filter(r => r.st.gps === 'REVER GPS live');
+  else if (f === 'porta') shown = shown.filter(r => /Aberta|Desligado/i.test(r.port));
+  if (q) shown = shown.filter(r => [r.v.mat,r.v.plate,r.v.transp,r.v.tipo,r.v.obs,r.v.msgGPS,r.live?.state,r.action,r.port,r.temp].filter(Boolean).join(' ').toLowerCase().includes(q));
+  const missing = rows.filter(r=>!r.live).length;
+  const actions = rows.filter(r=>r.action).length;
+  const liveGps = rows.filter(r=>r.st.gps==='GPS OK live').length;
+  const liveRever = rows.filter(r=>r.st.gps==='REVER GPS live').length;
+  sum.innerHTML = `
+    <div class="data-chip good"><div class="data-chip-label">Inofleet carregado</div><div class="data-chip-main">${data.rows.length} linhas</div><div class="data-chip-sub">${data.source || 'JSON'} · ${fmtDateTime(data.updatedAt)}</div></div>
+    <div class="data-chip ${missing?'warn':'good'}"><div class="data-chip-label">Cruzamento frota</div><div class="data-chip-main">${fleet.length - missing}/${fleet.length} encontradas</div><div class="data-chip-sub">${missing} sem linha Inofleet</div></div>
+    <div class="data-chip ${liveRever?'warn':'good'}"><div class="data-chip-label">GPS live</div><div class="data-chip-main">${liveGps} OK · ${liveRever} rever</div><div class="data-chip-sub">limite ${threshold} dias</div></div>
+    <div class="data-chip ${actions?'warn':'good'}"><div class="data-chip-label">Ações teste</div><div class="data-chip-main">${actions}</div><div class="data-chip-sub">não aplicadas automaticamente</div></div>`;
+  body.innerHTML = shown.map(r => {
+    const app = r.v.msgGPS || r.v.msgPorta || r.v.msgTemp || r.v.obs || 'OK';
+    const last = r.live ? (r.live.rawDate || (r.live.date ? new Date(r.live.date).toLocaleString('pt-PT') : '—')) : '—';
+    return `<tr>
+      <td style="font-family:'DM Mono',monospace;font-weight:600">${r.v.mat || r.v.plate}</td>
+      <td>${app}</td>
+      <td><span class="pill ${r.st.cls}">${r.st.gps}</span>${r.live?.state ? ` <span class="pill p-blue">${r.live.state}</span>` : ''}</td>
+      <td style="white-space:nowrap">${last}</td>
+      <td>${r.live ? r.live.speed + ' km/h' : '—'}</td>
+      <td>${r.live?.ignition || '—'}</td>
+      <td>${r.port || '—'}</td>
+      <td>${r.temp || '—'}</td>
+      <td>${r.action ? `<span class="pill p-amber">${r.action}</span>` : '<span class="pill p-green">Sem ação</span>'}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="9" class="no-data">Sem resultados neste filtro.</td></tr>`;
+}
 
 // ── EXPORTAR LISTA FILTRADA ───────────────────────────────────────────────────
 function exportListaFiltrada() {
