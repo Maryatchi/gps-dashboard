@@ -1114,6 +1114,16 @@ function countManualEdits() {
   })).length;
 }
 
+function reopenManualStateForProblem(edit, reason) {
+  const next = { ...(edit || {}) };
+  if (next.obs === 'Resolvido' || next.obs === 'Aguardar') {
+    next.obs = '';
+    next.reopenedAt = new Date().toISOString();
+    next.reopenedReason = reason || 'Problema voltou em ficheiro novo';
+  }
+  return next;
+}
+
 function renderDataState() {
   const el = document.getElementById('data-state');
   if (!el) return;
@@ -1654,6 +1664,7 @@ const _semCanbus    = v => (v.tipo !== 'Rigido' && v.tipo !== 'Tractor');
 // Aplicar dados de porta aos veículos (salta tipos sem sensor de porta)
 function applyPortaData() {
   if (!portaData.size) return;
+  let changed = false;
   ALL_VEHICLES.forEach((v, i) => {
     if (_tipoSemPorta(v.tipo)) return; // Tractores e Lonas não têm sensor de porta
     const mn = norm(v.mat), pn = norm(v.plate||'');
@@ -1661,12 +1672,14 @@ function applyPortaData() {
     const mk = eKey(v);
     if (temPorta) {
       ALL_VEHICLES[i] = { ...v, portaOK: true, msgPorta: '' };
-      if (edits[mk]?.porta === 'REVER S.Porta') edits[mk] = { ...(edits[mk]||{}), porta: '' };
+      if (edits[mk]?.porta === 'REVER S.Porta') { edits[mk] = { ...(edits[mk]||{}), porta: '' }; changed = true; }
     } else {
       ALL_VEHICLES[i] = { ...v, portaOK: false, msgPorta: 'REVER S.Porta' };
-      edits[mk] = { ...(edits[mk]||{}), porta: 'REVER S.Porta' };
+      edits[mk] = { ...reopenManualStateForProblem(edits[mk], 'Porta voltou a dar problema em ficheiro novo'), porta: 'REVER S.Porta' };
+      changed = true;
     }
   });
+  if (changed) { ls(K_EDITS, edits); syncToSupabase(K_EDITS, edits); }
 }
 function applyPosData() {
   if (!Object.keys(posData).length) return;
@@ -1685,7 +1698,7 @@ function applyPosData() {
   const threshEl = document.getElementById('gen-threshold');
   const thresh = threshEl ? Math.max(1, parseInt(threshEl.value)||7) : 7;
 
-  let updated = 0, cleaned = 0;
+  let updated = 0, cleaned = 0, reopened = 0;
   ALL_VEHICLES.forEach((v, i) => {
     const mn = norm(v.mat), pn = norm(v.plate||'');
     const pd = posData[mn] || posData[pn];
@@ -1701,8 +1714,8 @@ function applyPosData() {
       return;
     }
 
-    if (pd.days <= 2) {
-      // 0-2 dias → GPS OK — limpar qualquer edição GPS negativa
+    if (pd.days <= thresh) {
+      // Dentro do limite configurado → GPS OK — limpar qualquer edição GPS negativa
       ALL_VEHICLES[i] = { ...v, gpsOK: true, msgGPS: '', daysAgo: pd.days, lastSeen: lastSeenUpd };
       if (edits[mk2]?.gps && edits[mk2].gps !== 'GPS OK' && edits[mk2].gps !== '') {
         console.log(`[posData] GPS OK → limpou edit "${edits[mk2].gps}" de ${v.mat}`);
@@ -1710,17 +1723,17 @@ function applyPosData() {
         cleaned++;
       }
     } else {
-      // 3+ dias → REVER GPS
+      // Acima do limite configurado → REVER GPS, mesmo que tenha sido resolvido manualmente antes
       ALL_VEHICLES[i] = { ...v, daysAgo: pd.days, lastSeen: lastSeenUpd };
-      if (edits[mk2]?.gps !== 'Instalar GPS') {
-        ALL_VEHICLES[i] = { ...ALL_VEHICLES[i], gpsOK: false, msgGPS: 'REVER GPS' };
-        const editUpd = { ...(edits[mk2]||{}), gps: 'REVER GPS' };
-        if (editUpd.obs === 'Resolvido') editUpd.obs = '';
-        edits[mk2] = editUpd;
-      }
+      ALL_VEHICLES[i] = { ...ALL_VEHICLES[i], gpsOK: false, msgGPS: 'REVER GPS' };
+      const wasClosed = ['Resolvido','Aguardar'].includes(edits[mk2]?.obs);
+      const editUpd = { ...reopenManualStateForProblem(edits[mk2], 'GPS voltou a dar problema em ficheiro novo'), gps: 'REVER GPS' };
+      if (wasClosed) reopened++;
+      edits[mk2] = editUpd;
     }
     updated++;
   });
+  if (updated || cleaned || reopened) { ls(K_EDITS, edits); syncToSupabase(K_EDITS, edits); }
   console.log(`Posições aplicadas: ${updated} veículos · ${cleaned} edições GPS limpas (threshold: ${thresh} dias)`);
 }
 
@@ -2255,21 +2268,24 @@ function fixText(s) {
     'Ã§':'ç','Ã‡':'Ç','Âº':'º','Âª':'ª','Â·':'·','â€™':"'",'â€“':'-','â€”':'-'
   };
   Object.keys(repl).forEach(k => { t = t.split(k).join(repl[k]); });
+  const keepCase = (m, word) => m && m[0] === m[0].toUpperCase()
+    ? word.charAt(0).toUpperCase() + word.slice(1)
+    : word;
   return t
-    .replace(/liga��o/gi, 'ligação')
-    .replace(/liga��es/gi, 'ligações')
-    .replace(/alimenta��o/gi, 'alimentação')
-    .replace(/corre��o/gi, 'correção')
-    .replace(/instala��o/gi, 'instalação')
-    .replace(/comunica��o/gi, 'comunicação')
-    .replace(/atualiza��o/gi, 'atualização')
-    .replace(/manuten��o/gi, 'manutenção')
-    .replace(/tens�o/gi, 'tensão')
-    .replace(/ve�culo/gi, 'veículo')
-    .replace(/matr�cula/gi, 'matrícula')
-    .replace(/t�rmic/gi, 'térmic')
-    .replace(/isot�rmic/gi, 'isotérmic')
-    .replace(/n�/gi, 'nº');
+    .replace(/liga(?:��|ï¿½|�)o/gi, m => keepCase(m, 'ligação'))
+    .replace(/liga(?:��|ï¿½|�)es/gi, m => keepCase(m, 'ligações'))
+    .replace(/alimenta(?:��|ï¿½|�)o/gi, m => keepCase(m, 'alimentação'))
+    .replace(/corre(?:��|ï¿½|�)o/gi, m => keepCase(m, 'correção'))
+    .replace(/instala(?:��|ï¿½|�)o/gi, m => keepCase(m, 'instalação'))
+    .replace(/comunica(?:��|ï¿½|�)o/gi, m => keepCase(m, 'comunicação'))
+    .replace(/atualiza(?:��|ï¿½|�)o/gi, m => keepCase(m, 'atualização'))
+    .replace(/manuten(?:��|ï¿½|�)o/gi, m => keepCase(m, 'manutenção'))
+    .replace(/tens(?:�|ï¿½)o/gi, m => keepCase(m, 'tensão'))
+    .replace(/ve(?:�|ï¿½)culo/gi, m => keepCase(m, 'veículo'))
+    .replace(/matr(?:�|ï¿½)cula/gi, m => keepCase(m, 'matrícula'))
+    .replace(/isot(?:�|ï¿½|��)rmic/gi, m => keepCase(m, 'isotérmic'))
+    .replace(/t(?:�|ï¿½|��)rmic/gi, m => keepCase(m, 'térmic'))
+    .replace(/n(?:�|ï¿½)/gi, 'nº');
 }
 
 // Migra edits antigos (por posição 0,1,2…) para edits por matrícula
