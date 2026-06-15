@@ -79,14 +79,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .week-badge{font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);background:var(--surface2);border:1px solid var(--border2);padding:3px 10px;border-radius:99px}
 .region-badge{font-size:11px;color:#5eead4;background:var(--teal-dim);border:1px solid rgba(20,184,166,.25);padding:3px 10px;border-radius:99px;font-weight:500}
 .save-ind{font-size:11px;color:var(--green);font-family:'DM Mono',monospace;display:none}
-.data-state{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin:-.45rem 0 1rem}
-.data-chip{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:9px 11px;min-height:52px}
-.data-chip.warn{border-color:rgba(245,158,11,.35);background:var(--amber-dim)}
-.data-chip.danger{border-color:rgba(239,68,68,.35);background:var(--red-dim)}
-.data-chip.good{border-color:rgba(34,197,94,.28);background:var(--green-dim)}
-.data-chip-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}
-.data-chip-main{font-size:13px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.data-chip-sub{font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .btn-sm{background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:12px;padding:5px 11px;cursor:pointer;transition:all .2s}
 .btn-sm:hover{border-color:var(--blue);color:var(--blue)}
 .btn-amber{background:var(--amber-dim);border:1px solid rgba(245,158,11,.35);color:#fcd34d;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:12px;padding:5px 11px;cursor:pointer;font-weight:500;transition:all .2s}
@@ -499,7 +491,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     <button class="tab-btn" onclick="switchTab('registos',this)">📋 Registos</button>
     <button class="tab-btn" onclick="switchTab('plano',this)">🗓️ Planeamento</button>
     <button class="tab-btn" onclick="switchTab('campo',this)">📱 Campo</button>
-    <button class="tab-btn" onclick="switchTab('inofleet',this)">🛰️ Inofleet Live</button>
     <button class="tab-btn" onclick="switchTab('gerar',this)">⚙️ Gerar Base JSON</button>
     <button class="tab-btn" onclick="switchTab('kmsf',this)">🌡️ Kms & Frio</button>
   </div>
@@ -514,7 +505,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <button class="rfilt" onclick="setRegion(this,'PDTN')">PDTN</button>
       <button class="rfilt" onclick="setRegion(this,'ALL')">Toda a frota</button>
     </div>
-    <div class="data-state" id="data-state"></div>
     <div class="kpi-strip">
       <div class="kpi"><div class="kv c-blue" id="k-total">—</div><div class="kl">Total frota</div></div>
       <div class="kpi"><div class="kv c-amber" id="k-oficina">—</div><div class="kl">Oficina</div></div>
@@ -722,59 +712,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     <div class="campo-summary" id="campo-summary"></div>
     <div class="campo-count" id="campo-count"></div>
     <div class="campo-list" id="campo-list"></div>
-  </div>
-
-  <!-- INOFLEET LIVE TESTE -->
-  <div class="tab-page" id="page-inofleet">
-    <div style="max-width:1300px;margin:0 auto">
-      <div class="card" style="border-color:rgba(59,130,246,.25);background:var(--blue-dim)">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
-          <div>
-            <div style="font-size:15px;font-weight:700;margin-bottom:3px">🛰️ Inofleet Live — modo teste</div>
-            <div style="font-size:12px;color:var(--muted);line-height:1.6">Compara a grelha live do Inofleet com a dashboard. Não altera frota, não apaga edits, não grava por cima da base.</div>
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn-sm" onclick="refreshInofleetLiveFromCloud(true)">☁️ Atualizar cloud</button>
-            <button class="btn-blue" onclick="document.getElementById('inofleet-json-file').click()">📂 Carregar JSON teste</button>
-            <button class="btn-sm" onclick="clearInofleetLive()">Limpar teste</button>
-            <input type="file" id="inofleet-json-file" accept=".json" style="display:none" onchange="loadInofleetLiveFile(this.files[0])">
-          </div>
-        </div>
-      </div>
-      <div class="data-state" id="inofleet-summary"></div>
-      <div class="card" style="border-color:rgba(245,158,11,.28);background:var(--amber-dim)">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
-          <div>
-            <div class="card-title" style="margin-bottom:4px">Atualizar GPS a partir do Inofleet Live — teste</div>
-            <div style="font-size:12px;color:var(--muted);line-height:1.6">Pré-visualiza como ficaria a atualização de últimas posições usando os dados live. Não altera a dashboard nem grava na cloud.</div>
-          </div>
-          <button class="btn-amber" onclick="previewInofleetGpsUpdate()">Pré-visualizar GPS</button>
-        </div>
-        <div id="inofleet-gps-preview" style="margin-top:1rem;display:none"></div>
-      </div>
-      <div class="card">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:1rem">
-          <div class="card-title" style="margin:0">Comparação live</div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <input class="sinput" id="inofleet-search" placeholder="Pesquisar matrícula, estado..." oninput="renderInofleetLive()" style="margin-bottom:0;min-width:220px">
-            <select id="inofleet-filter" onchange="renderInofleetLive()" style="background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:7px 10px;outline:none">
-              <option value="all">Todos</option>
-              <option value="action">Com ação sugerida</option>
-              <option value="missing">Não aparecem no Inofleet</option>
-              <option value="gps">REVER GPS live</option>
-              <option value="porta">Porta/sensor</option>
-              <option value="temp">Temperatura</option>
-            </select>
-          </div>
-        </div>
-        <div style="overflow:auto;max-height:560px;border:1px solid var(--border);border-radius:var(--rl)">
-          <table class="data-table">
-            <thead><tr><th>Matrícula</th><th>App</th><th>Inofleet</th><th>Último sinal</th><th>Vel.</th><th>Ignição</th><th>Porta</th><th>Temp</th><th>Ação teste</th></tr></thead>
-            <tbody id="inofleet-body"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
   </div>
 
   <!-- GERAR BASE JSON -->
@@ -1152,7 +1089,6 @@ function updateSyncDot() {
   } else {
     dot.style.display = 'none';
   }
-  renderDataState();
 }
 
 function fmtDateTime(iso) {
@@ -1176,42 +1112,6 @@ function reopenManualStateForProblem(edit, reason) {
     next.reopenedReason = reason || 'Problema voltou em ficheiro novo';
   }
   return next;
-}
-
-function renderDataState() {
-  const el = document.getElementById('data-state');
-  if (!el) return;
-  const localTotal = ALL_VEHICLES.length;
-  const cloudTotal = Number(meta.cloudTotal || 0);
-  const hasCloudTotal = cloudTotal > 0;
-  const diff = hasCloudTotal ? localTotal - cloudTotal : 0;
-  const pending = Object.keys(_pendingSync || {}).length;
-  const dirty = !!ls(K_LOCAL_DIRTY);
-  const manual = countManualEdits();
-  const sourceClass = pending || dirty ? 'warn' : _offlineMode ? 'danger' : 'good';
-  const diffClass = !hasCloudTotal ? '' : diff === 0 ? 'good' : 'warn';
-  const diffText = !hasCloudTotal ? 'Sem comparação cloud' : diff === 0 ? 'Local bate certo com cloud' : `Diferença ${diff > 0 ? '+' : ''}${diff}`;
-  el.innerHTML = `
-    <div class="data-chip ${sourceClass}">
-      <div class="data-chip-label">Estado dos dados</div>
-      <div class="data-chip-main">${_offlineMode ? 'Offline' : pending ? 'Por sincronizar' : dirty ? 'Base local' : 'Cloud sincronizada'}</div>
-      <div class="data-chip-sub">${pending ? pending + ' alteração' + (pending > 1 ? 'es' : '') + ' pendente' : dirty ? 'guarda/sincroniza para enviar' : 'última leitura ' + fmtDateTime(meta.cloudLoadedAt)}</div>
-    </div>
-    <div class="data-chip ${diffClass}">
-      <div class="data-chip-label">Total frota</div>
-      <div class="data-chip-main">Local ${localTotal}${hasCloudTotal ? ' · Cloud ' + cloudTotal : ''}</div>
-      <div class="data-chip-sub">${diffText}</div>
-    </div>
-    <div class="data-chip ${manual ? 'warn' : ''}">
-      <div class="data-chip-label">Alterações manuais</div>
-      <div class="data-chip-main">${manual} viatura${manual === 1 ? '' : 's'}</div>
-      <div class="data-chip-sub">${manual ? 'preservadas por matrícula' : 'sem edições manuais ativas'}</div>
-    </div>
-    <div class="data-chip">
-      <div class="data-chip-label">Semana ativa</div>
-      <div class="data-chip-main">${meta.week || '—'}</div>
-      <div class="data-chip-sub">${meta.date || 'sem data'}</div>
-    </div>`;
 }
 
 // Avisar antes de fechar se houver pendências por guardar
@@ -1473,7 +1373,6 @@ const K_EXTRAS    = 'fleet_extras_v1';    // viaturas adicionadas manualmente
 const K_LOCAL_DIRTY = 'fleet_local_dirty_v1'; // existe base local ainda não enviada para a cloud
 const K_INTERNAL    = 'fleet_internal_v2';    // dados internos permanentes: reboque, notes, tipoGalera por matrícula
 const K_CLOUD_RESET = 'fleet_cloud_reset_v1'; // marcador cloud para limpar edits/extras locais antigos uma vez
-const K_INOFLEET_LIVE = 'fleet_inofleet_live_test_v1'; // overlay de teste, nunca altera a frota
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
 let ALL_VEHICLES = [];
@@ -2410,7 +2309,7 @@ function upBadge() {
 
 function setRegion(btn,r) { currentRegion=r; document.querySelectorAll('.rfilt').forEach(b=>b.classList.remove('on')); btn.classList.add('on'); renderAll(); }
 function setVFilt(btn,f)  { currentVFilt=f;  document.querySelectorAll('.vfilt').forEach(b=>b.classList.remove('on')); btn.classList.add('on'); renderVehicles(); }
-function switchTab(id,btn) { document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); document.querySelectorAll('.tab-page').forEach(p=>p.classList.remove('active')); btn.classList.add('active'); document.getElementById('page-'+id).classList.add('active'); if(id==='trend')renderTrend(); if(id==='campo')renderCampo(); if(id==='inofleet')refreshInofleetLiveFromCloud(false); if(id==='kmsf'){renderKmsf();renderKmsfMobile();} }
+function switchTab(id,btn) { document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); document.querySelectorAll('.tab-page').forEach(p=>p.classList.remove('active')); btn.classList.add('active'); document.getElementById('page-'+id).classList.add('active'); if(id==='trend')renderTrend(); if(id==='campo')renderCampo(); if(id==='kmsf'){renderKmsf();renderKmsfMobile();} }
 function switchMobileTab(id, btn) {
   document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -2420,7 +2319,7 @@ function switchMobileTab(id, btn) {
   if (id === 'campo') renderCampo();
   if (id === 'kmsf') { renderKmsf(); renderKmsfMobile(); }
 }
-function renderAll() { renderDataState(); renderKPIs(); renderSysBars(); renderFleetActions(); renderTransporters(); renderVehicles(); if(document.getElementById('page-campo')?.classList.contains('active'))renderCampo(); if(document.getElementById('page-inofleet')?.classList.contains('active'))renderInofleetLive(); }
+function renderAll() { renderKPIs(); renderSysBars(); renderFleetActions(); renderTransporters(); renderVehicles(); if(document.getElementById('page-campo')?.classList.contains('active'))renderCampo(); }
 
 // ── RENDERS ───────────────────────────────────────────────────────────────────
 function renderKPIs() {
@@ -3612,293 +3511,6 @@ async function generateFromCurrent() {
 }
 
 
-// ── INOFLEET LIVE TESTE ───────────────────────────────────────────────────────
-function stripHtmlText(v) {
-  if (v === undefined || v === null) return '';
-  const s = String(v);
-  if (!/[<>]/.test(s)) return fixText(s).trim();
-  const d = document.createElement('div');
-  d.innerHTML = s;
-  return fixText((d.innerText || d.textContent || '').replace(/\s+/g,' ').trim());
-}
-
-function parseInofleetDate(v) {
-  if (!v) return null;
-  if (v instanceof Date) return v;
-  const s = String(v).trim();
-  const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4}),?\s+(\d{2}):(\d{2})(?::(\d{2}))?/);
-  if (m) return new Date(+m[3], +m[2]-1, +m[1], +m[4], +m[5], +(m[6]||0));
-  const d = new Date(s);
-  return isNaN(d) ? null : d;
-}
-
-function normalizeInofleetRow(r) {
-  const get = (...ks) => {
-    for (const k of ks) if (r && r[k] !== undefined && r[k] !== null && String(r[k]).trim() !== '') return r[k];
-    return '';
-  };
-  const plate = get('license','Matrícula','matricula','Nome','name');
-  const dt = parseInofleetDate(get('date','Data'));
-  const speedRaw = get('speed','Velocidade');
-  const speed = typeof speedRaw === 'number' ? speedRaw : parseFloat(String(speedRaw).replace(',','.')) || 0;
-  return {
-    plate: norm(plate),
-    plateLabel: String(plate || '').trim(),
-    rawDate: get('date','Data'),
-    date: dt ? dt.toISOString() : '',
-    description: stripHtmlText(get('description','Descrição')),
-    group: stripHtmlText(get('groupname','Grupo')),
-    address: stripHtmlText(get('address','Morada')),
-    locality: stripHtmlText(get('locality','Localidade')),
-    city: stripHtmlText(get('city','Cidade')),
-    nearest: stripHtmlText(get('nearestmarker','Marco mais próximo')),
-    speed,
-    ignition: stripHtmlText(get('ignition','Ignição')),
-    state: stripHtmlText(get('state','Estado')),
-    port1: stripHtmlText(get('port1','Porta digital 1')),
-    port2: stripHtmlText(get('port2','Porta digital 2')),
-    temp1: stripHtmlText(get('temp1','Sensor temperatura 1')),
-    temp2: stripHtmlText(get('temp2','Sensor temperatura 2')),
-    totalKms: get('totalKms','Total Kms')
-  };
-}
-
-function loadInofleetLiveFile(file) {
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    try {
-      const parsed = JSON.parse(e.target.result);
-      const rows = Array.isArray(parsed) ? parsed : (parsed.rows || parsed.data || []);
-      if (!Array.isArray(rows) || !rows.length) throw new Error('JSON sem linhas.');
-      const normRows = rows.map(normalizeInofleetRow).filter(r => r.plate);
-      ls(K_INOFLEET_LIVE, { updatedAt:new Date().toISOString(), source:file.name, rows:normRows });
-      showSync('Inofleet live carregado em modo teste', '#93c5fd');
-      renderInofleetLive();
-    } catch(err) {
-      alert('Erro ao ler JSON Inofleet: ' + err.message);
-    }
-  };
-  reader.readAsText(file, 'utf-8');
-}
-
-function clearInofleetLive() {
-  localStorage.removeItem(K_INOFLEET_LIVE);
-  renderInofleetLive();
-}
-
-function businessDaysSince(fromDate, toDate = new Date()) {
-  if (!fromDate || isNaN(fromDate)) return null;
-  const start = new Date(fromDate);
-  const end = new Date(toDate);
-  start.setHours(0,0,0,0);
-  end.setHours(0,0,0,0);
-  if (start >= end) return 0;
-  let days = 0;
-  const cur = new Date(start);
-  cur.setDate(cur.getDate() + 1);
-  while (cur <= end) {
-    const dow = cur.getDay();
-    if (dow !== 0 && dow !== 6) days++;
-    cur.setDate(cur.getDate() + 1);
-  }
-  return days;
-}
-
-function inofleetLiveStatus(live, thresholdDays) {
-  if (!live) return { gps:'Sem linha Inofleet', cls:'p-red', days:null, hours:null };
-  const dt = parseInofleetDate(live.date || live.rawDate);
-  if (!dt) return { gps:'Sem data', cls:'p-amber', days:null, hours:null };
-  const diffH = Math.max(0, (Date.now() - dt.getTime()) / 36e5);
-  const days = businessDaysSince(dt);
-  const ok = days <= thresholdDays;
-  return { gps: ok ? 'GPS OK live' : 'REVER GPS live', cls: ok ? 'p-green' : 'p-amber', days, hours:diffH };
-}
-
-function getInofleetLiveMap() {
-  const data = normalizeInofleetDataset(ls(K_INOFLEET_LIVE));
-  const liveByPlate = {};
-  if (data && Array.isArray(data.rows)) data.rows.forEach(r => { if (r.plate) liveByPlate[r.plate] = r; });
-  return { data, liveByPlate };
-}
-
-function normalizeInofleetDataset(data) {
-  if (!data || !Array.isArray(data.rows)) return data;
-  const rows = data.rows.map(normalizeInofleetRow).filter(r => r.plate);
-  return { ...data, rows };
-}
-
-async function refreshInofleetLiveFromCloud(showFeedback) {
-  try {
-    const sb = getSB();
-    const res = await sb.from('fleet_state').select('value,updated_at').eq('key', K_INOFLEET_LIVE).maybeSingle();
-    if (res.error) throw res.error;
-    if (res.data && res.data.value) {
-      const cloudData = normalizeInofleetDataset({
-        ...res.data.value,
-        cloudUpdatedAt: res.data.updated_at,
-        source: res.data.value.source || 'Supabase Inofleet Live'
-      });
-      ls(K_INOFLEET_LIVE, cloudData);
-      renderInofleetLive();
-      if (showFeedback) showSync('Inofleet Live atualizado da cloud', '#93c5fd');
-      return true;
-    }
-    renderInofleetLive();
-    if (showFeedback) showSync('Sem Inofleet Live na cloud', '#f59e0b');
-  } catch(e) {
-    console.warn('refresh Inofleet Live cloud', e);
-    renderInofleetLive();
-    if (showFeedback) showSync('Não consegui atualizar Inofleet Live da cloud', '#f59e0b');
-  }
-  return false;
-}
-
-function previewInofleetGpsUpdate() {
-  const box = document.getElementById('inofleet-gps-preview');
-  if (!box) return;
-  const { data, liveByPlate } = getInofleetLiveMap();
-  box.style.display = 'block';
-  if (!data || !Array.isArray(data.rows) || !data.rows.length) {
-    box.innerHTML = `<div class="no-data" style="padding:1rem">Sem dados Inofleet Live carregados para simular.</div>`;
-    return;
-  }
-  const threshold = Math.max(1, parseInt(document.getElementById('gen-threshold')?.value || '3') || 3);
-  const fleet = ALL_VEHICLES.map((v,i)=>getEff(v,i)).filter(v=>regMatch(v) && !['Oficina','Sinistro','Removida'].includes(v.obs));
-  const rows = fleet.map(v => {
-    const live = liveByPlate[norm(v.mat || v.plate)];
-    const current = v.msgGPS || (v.gpsOK ? 'GPS OK' : 'Sem estado GPS');
-    let target = current;
-    let reason = '';
-    let cls = 'p-gray';
-    let days = null;
-    let last = '—';
-    if (!live) {
-      reason = 'Sem linha no Inofleet Live';
-      cls = 'p-red';
-    } else {
-      const dt = parseInofleetDate(live.date || live.rawDate);
-      last = live.rawDate || (live.date ? new Date(live.date).toLocaleString('pt-PT') : '—');
-      if (!dt) {
-        reason = 'Sem data válida';
-        cls = 'p-amber';
-      } else {
-        days = businessDaysSince(dt);
-        if (days <= threshold) {
-          target = 'GPS OK';
-          reason = days === 0 ? 'Comunicou hoje' : `Comunicou há ${days} dias úteis`;
-          cls = current === target ? 'p-green' : 'p-blue';
-        } else {
-          target = 'REVER GPS';
-          reason = `Sem comunicar há ${days} dias úteis`;
-          cls = current === target ? 'p-amber' : 'p-red';
-        }
-      }
-    }
-    const changed = target !== current && !reason.startsWith('Ignorado') && !reason.startsWith('Sem linha') && !reason.startsWith('Sem data');
-    return { v, live, current, target, reason, cls, changed, days, last };
-  });
-  const wouldOk = rows.filter(r=>r.changed && r.target==='GPS OK').length;
-  const wouldRever = rows.filter(r=>r.changed && r.target==='REVER GPS').length;
-  const noChange = rows.filter(r=>!r.changed && r.live).length;
-  const missing = rows.filter(r=>!r.live).length;
-  const ignored = ALL_VEHICLES.map((v,i)=>getEff(v,i)).filter(v=>regMatch(v) && ['Oficina','Sinistro'].includes(v.obs)).length;
-  const changedRows = rows.filter(r=>r.changed || !r.live).slice(0,120);
-  box.innerHTML = `
-    <div class="data-state" style="margin:0 0 .75rem">
-      <div class="data-chip good"><div class="data-chip-label">GPS OK teste</div><div class="data-chip-main">${wouldOk}</div><div class="data-chip-sub">mudariam para OK</div></div>
-      <div class="data-chip ${wouldRever?'danger':'good'}"><div class="data-chip-label">REVER GPS teste</div><div class="data-chip-main">${wouldRever}</div><div class="data-chip-sub">mudariam para rever</div></div>
-      <div class="data-chip"><div class="data-chip-label">Sem alteração</div><div class="data-chip-main">${noChange}</div><div class="data-chip-sub">ficariam iguais</div></div>
-      <div class="data-chip ${missing?'warn':'good'}"><div class="data-chip-label">Sem linha live</div><div class="data-chip-main">${missing}</div><div class="data-chip-sub">não seriam tocadas</div></div>
-      <div class="data-chip"><div class="data-chip-label">Ignoradas</div><div class="data-chip-main">${ignored}</div><div class="data-chip-sub">oficina/sinistro</div></div>
-    </div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:.6rem">Limite usado: ${threshold} dias úteis. Oficina/Sinistro ficam excluídas. Isto é apenas simulação; nenhuma viatura foi alterada.</div>
-    <div style="overflow:auto;max-height:320px;border:1px solid var(--border);border-radius:var(--r)">
-      <table class="data-table">
-        <thead><tr><th>Matrícula</th><th>Tipo</th><th>Estado atual</th><th>Resultado teste</th><th>Último sinal live</th><th>Motivo</th></tr></thead>
-        <tbody>${changedRows.map(r => `<tr>
-          <td style="font-family:'DM Mono',monospace;font-weight:600">${r.v.mat || r.v.plate}</td>
-          <td><span class="pill p-blue">${r.v.tipo || '—'}</span></td>
-          <td>${r.current}</td>
-          <td><span class="pill ${r.cls}">${r.target}</span></td>
-          <td style="white-space:nowrap">${r.last}</td>
-          <td>${r.reason}</td>
-        </tr>`).join('') || `<tr><td colspan="6" class="no-data">Nenhuma diferença relevante nesta simulação.</td></tr>`}</tbody>
-      </table>
-    </div>`;
-}
-
-function renderInofleetLive() {
-  const data = normalizeInofleetDataset(ls(K_INOFLEET_LIVE));
-  const sum = document.getElementById('inofleet-summary');
-  const body = document.getElementById('inofleet-body');
-  if (!sum || !body) return;
-  if (!data || !Array.isArray(data.rows) || !data.rows.length) {
-    sum.innerHTML = `<div class="data-chip warn"><div class="data-chip-label">Modo teste</div><div class="data-chip-main">Sem dados Inofleet</div><div class="data-chip-sub">carrega um JSON extraído da grelha</div></div>`;
-    body.innerHTML = `<tr><td colspan="9" class="no-data">Sem dados Inofleet carregados. A base da app não foi alterada.</td></tr>`;
-    return;
-  }
-  const liveByPlate = {};
-  data.rows.forEach(r => { if (r.plate) liveByPlate[r.plate] = r; });
-  const threshold = Math.max(1, parseInt(document.getElementById('gen-threshold')?.value || '3') || 3);
-  const ignoredOperational = ALL_VEHICLES.map((v,i)=>getEff(v,i)).filter(v=>regMatch(v) && ['Oficina','Sinistro'].includes(v.obs)).length;
-  const fleet = ALL_VEHICLES.map((v,i)=>getEff(v,i)).filter(v=>regMatch(v) && !['Oficina','Sinistro','Removida'].includes(v.obs));
-  const rows = fleet.map(v => {
-    const plate = norm(v.mat || v.plate);
-    const live = liveByPlate[plate];
-    const st = inofleetLiveStatus(live, threshold);
-    const portApplies = hasPorta(v);
-    const tempApplies = hasTemp(v);
-    const rawPort = live ? [live.port1, live.port2].filter(Boolean).join(' / ') : '';
-    const rawTemp = live ? [live.temp1, live.temp2].filter(Boolean).join(' / ') : '';
-    const port = portApplies ? rawPort : '';
-    const temp = tempApplies ? rawTemp : '';
-    let action = '';
-    if (!live) action = 'Validar: não aparece no Inofleet';
-    else if (v.msgGPS === 'Instalar GPS') action = 'Tem sinal no Inofleet: rever Instalar GPS';
-    else if (['Resolvido','Aguardar'].includes(v.obs) && st.gps === 'REVER GPS live') action = 'Reabriria GPS';
-    else if (st.gps === 'REVER GPS live' && !v.msgGPS) action = 'Novo REVER GPS';
-    else if (portApplies && /Aberta|Desligado/i.test(port)) action = 'Rever porta/sensor';
-    else if (tempApplies && temp && /--|erro|falha|deslig/i.test(temp)) action = 'Rever temperatura';
-    return { v, live, st, port, temp, rawPort, rawTemp, portApplies, tempApplies, action };
-  });
-  const q = (document.getElementById('inofleet-search')?.value || '').toLowerCase();
-  const f = document.getElementById('inofleet-filter')?.value || 'all';
-  let shown = rows;
-  if (f === 'action') shown = shown.filter(r => r.action);
-  else if (f === 'missing') shown = shown.filter(r => !r.live);
-  else if (f === 'gps') shown = shown.filter(r => r.st.gps === 'REVER GPS live');
-  else if (f === 'porta') shown = shown.filter(r => r.portApplies && /Aberta|Desligado/i.test(r.port));
-  else if (f === 'temp') shown = shown.filter(r => r.tempApplies && r.temp);
-  if (q) shown = shown.filter(r => [r.v.mat,r.v.plate,r.v.transp,r.v.tipo,r.v.obs,r.v.msgGPS,r.live?.state,r.action,r.port,r.temp].filter(Boolean).join(' ').toLowerCase().includes(q));
-  const missing = rows.filter(r=>!r.live).length;
-  const actions = rows.filter(r=>r.action).length;
-  const liveGps = rows.filter(r=>r.st.gps==='GPS OK live').length;
-  const liveRever = rows.filter(r=>r.st.gps==='REVER GPS live').length;
-  sum.innerHTML = `
-    <div class="data-chip good"><div class="data-chip-label">Inofleet carregado</div><div class="data-chip-main">${data.rows.length} linhas</div><div class="data-chip-sub">${data.source || 'JSON'} · ${fmtDateTime(data.updatedAt)}</div></div>
-    <div class="data-chip ${missing?'warn':'good'}"><div class="data-chip-label">Cruzamento frota</div><div class="data-chip-main">${fleet.length - missing}/${fleet.length} encontradas</div><div class="data-chip-sub">${missing} sem linha · ${ignoredOperational} excluídas</div></div>
-    <div class="data-chip ${liveRever?'warn':'good'}"><div class="data-chip-label">GPS live</div><div class="data-chip-main">${liveGps} OK · ${liveRever} rever</div><div class="data-chip-sub">limite ${threshold} dias úteis</div></div>
-    <div class="data-chip ${actions?'warn':'good'}"><div class="data-chip-label">Ações teste</div><div class="data-chip-main">${actions}</div><div class="data-chip-sub">não aplicadas automaticamente</div></div>`;
-  body.innerHTML = shown.map(r => {
-    const app = r.v.msgGPS || (r.portApplies ? r.v.msgPorta : '') || (r.tempApplies ? r.v.msgTemp : '') || r.v.obs || 'OK';
-    const last = r.live ? (r.live.rawDate || (r.live.date ? new Date(r.live.date).toLocaleString('pt-PT') : '—')) : '—';
-    const portCell = r.portApplies ? (r.port || '—') : '<span class="pill p-gray">Não aplicável</span>';
-    const tempCell = r.tempApplies ? (r.temp || '—') : '<span class="pill p-gray">Não aplicável</span>';
-    return `<tr>
-      <td style="font-family:'DM Mono',monospace;font-weight:600">${r.v.mat || r.v.plate}</td>
-      <td>${app}</td>
-      <td><span class="pill ${r.st.cls}">${r.st.gps}</span>${r.live?.state ? ` <span class="pill p-blue">${r.live.state}</span>` : ''}</td>
-      <td style="white-space:nowrap">${last}</td>
-      <td>${r.live ? r.live.speed + ' km/h' : '—'}</td>
-      <td>${r.live?.ignition || '—'}</td>
-      <td>${portCell}</td>
-      <td>${tempCell}</td>
-      <td>${r.action ? `<span class="pill p-amber">${r.action}</span>` : '<span class="pill p-green">Sem ação</span>'}</td>
-    </tr>`;
-  }).join('') || `<tr><td colspan="9" class="no-data">Sem resultados neste filtro.</td></tr>`;
-  if (document.getElementById('inofleet-gps-preview')?.style.display === 'block') previewInofleetGpsUpdate();
-}
 
 // ── EXPORTAR LISTA FILTRADA ───────────────────────────────────────────────────
 function exportListaFiltrada() {
