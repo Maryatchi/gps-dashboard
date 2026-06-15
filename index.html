@@ -752,6 +752,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
               <option value="missing">Não aparecem no Inofleet</option>
               <option value="gps">REVER GPS live</option>
               <option value="porta">Porta/sensor</option>
+              <option value="temp">Temperatura</option>
             </select>
           </div>
         </div>
@@ -3691,15 +3692,20 @@ function renderInofleetLive() {
     const plate = norm(v.mat || v.plate);
     const live = liveByPlate[plate];
     const st = inofleetLiveStatus(live, threshold);
-    const port = live ? [live.port1, live.port2].filter(Boolean).join(' / ') : '';
-    const temp = live ? [live.temp1, live.temp2].filter(Boolean).join(' / ') : '';
+    const portApplies = hasPorta(v);
+    const tempApplies = hasTemp(v);
+    const rawPort = live ? [live.port1, live.port2].filter(Boolean).join(' / ') : '';
+    const rawTemp = live ? [live.temp1, live.temp2].filter(Boolean).join(' / ') : '';
+    const port = portApplies ? rawPort : '';
+    const temp = tempApplies ? rawTemp : '';
     let action = '';
     if (!live) action = 'Validar: não aparece no Inofleet';
     else if (v.msgGPS === 'Instalar GPS') action = 'Tem sinal no Inofleet: rever Instalar GPS';
     else if (['Resolvido','Aguardar'].includes(v.obs) && st.gps === 'REVER GPS live') action = 'Reabriria GPS';
     else if (st.gps === 'REVER GPS live' && !v.msgGPS) action = 'Novo REVER GPS';
-    else if (/Aberta|Desligado/i.test(port) && hasPorta(v)) action = 'Rever porta/sensor';
-    return { v, live, st, port, temp, action };
+    else if (portApplies && /Aberta|Desligado/i.test(port)) action = 'Rever porta/sensor';
+    else if (tempApplies && temp && /--|erro|falha|deslig/i.test(temp)) action = 'Rever temperatura';
+    return { v, live, st, port, temp, rawPort, rawTemp, portApplies, tempApplies, action };
   });
   const q = (document.getElementById('inofleet-search')?.value || '').toLowerCase();
   const f = document.getElementById('inofleet-filter')?.value || 'all';
@@ -3707,7 +3713,8 @@ function renderInofleetLive() {
   if (f === 'action') shown = shown.filter(r => r.action);
   else if (f === 'missing') shown = shown.filter(r => !r.live);
   else if (f === 'gps') shown = shown.filter(r => r.st.gps === 'REVER GPS live');
-  else if (f === 'porta') shown = shown.filter(r => /Aberta|Desligado/i.test(r.port));
+  else if (f === 'porta') shown = shown.filter(r => r.portApplies && /Aberta|Desligado/i.test(r.port));
+  else if (f === 'temp') shown = shown.filter(r => r.tempApplies && r.temp);
   if (q) shown = shown.filter(r => [r.v.mat,r.v.plate,r.v.transp,r.v.tipo,r.v.obs,r.v.msgGPS,r.live?.state,r.action,r.port,r.temp].filter(Boolean).join(' ').toLowerCase().includes(q));
   const missing = rows.filter(r=>!r.live).length;
   const actions = rows.filter(r=>r.action).length;
@@ -3719,8 +3726,10 @@ function renderInofleetLive() {
     <div class="data-chip ${liveRever?'warn':'good'}"><div class="data-chip-label">GPS live</div><div class="data-chip-main">${liveGps} OK · ${liveRever} rever</div><div class="data-chip-sub">limite ${threshold} dias</div></div>
     <div class="data-chip ${actions?'warn':'good'}"><div class="data-chip-label">Ações teste</div><div class="data-chip-main">${actions}</div><div class="data-chip-sub">não aplicadas automaticamente</div></div>`;
   body.innerHTML = shown.map(r => {
-    const app = r.v.msgGPS || r.v.msgPorta || r.v.msgTemp || r.v.obs || 'OK';
+    const app = r.v.msgGPS || (r.portApplies ? r.v.msgPorta : '') || (r.tempApplies ? r.v.msgTemp : '') || r.v.obs || 'OK';
     const last = r.live ? (r.live.rawDate || (r.live.date ? new Date(r.live.date).toLocaleString('pt-PT') : '—')) : '—';
+    const portCell = r.portApplies ? (r.port || '—') : '<span class="pill p-gray">Não aplicável</span>';
+    const tempCell = r.tempApplies ? (r.temp || '—') : '<span class="pill p-gray">Não aplicável</span>';
     return `<tr>
       <td style="font-family:'DM Mono',monospace;font-weight:600">${r.v.mat || r.v.plate}</td>
       <td>${app}</td>
@@ -3728,8 +3737,8 @@ function renderInofleetLive() {
       <td style="white-space:nowrap">${last}</td>
       <td>${r.live ? r.live.speed + ' km/h' : '—'}</td>
       <td>${r.live?.ignition || '—'}</td>
-      <td>${r.port || '—'}</td>
-      <td>${r.temp || '—'}</td>
+      <td>${portCell}</td>
+      <td>${tempCell}</td>
       <td>${r.action ? `<span class="pill p-amber">${r.action}</span>` : '<span class="pill p-green">Sem ação</span>'}</td>
     </tr>`;
   }).join('') || `<tr><td colspan="9" class="no-data">Sem resultados neste filtro.</td></tr>`;
