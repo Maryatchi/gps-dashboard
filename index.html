@@ -3716,7 +3716,7 @@ function inofleetLiveStatus(live, thresholdDays) {
 }
 
 function getInofleetLiveMap() {
-  const data = ls(K_INOFLEET_LIVE);
+  const data = normalizeInofleetDataset(ls(K_INOFLEET_LIVE));
   const liveByPlate = {};
   if (data && Array.isArray(data.rows)) data.rows.forEach(r => { if (r.plate) liveByPlate[r.plate] = r; });
   return { data, liveByPlate };
@@ -3829,7 +3829,7 @@ function previewInofleetGpsUpdate() {
 }
 
 function renderInofleetLive() {
-  const data = ls(K_INOFLEET_LIVE);
+  const data = normalizeInofleetDataset(ls(K_INOFLEET_LIVE));
   const sum = document.getElementById('inofleet-summary');
   const body = document.getElementById('inofleet-body');
   if (!sum || !body) return;
