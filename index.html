@@ -741,6 +741,16 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
         </div>
       </div>
       <div class="data-state" id="inofleet-summary"></div>
+      <div class="card" style="border-color:rgba(245,158,11,.28);background:var(--amber-dim)">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+          <div>
+            <div class="card-title" style="margin-bottom:4px">Atualizar GPS a partir do Inofleet Live — teste</div>
+            <div style="font-size:12px;color:var(--muted);line-height:1.6">Pré-visualiza como ficaria a atualização de últimas posições usando os dados live. Não altera a dashboard nem grava na cloud.</div>
+          </div>
+          <button class="btn-amber" onclick="previewInofleetGpsUpdate()">Pré-visualizar GPS</button>
+        </div>
+        <div id="inofleet-gps-preview" style="margin-top:1rem;display:none"></div>
+      </div>
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:1rem">
           <div class="card-title" style="margin:0">Comparação live</div>
@@ -3674,6 +3684,89 @@ function inofleetLiveStatus(live, thresholdDays) {
   return { gps: ok ? 'GPS OK live' : 'REVER GPS live', cls: ok ? 'p-green' : 'p-amber', days, hours:diffH };
 }
 
+function getInofleetLiveMap() {
+  const data = ls(K_INOFLEET_LIVE);
+  const liveByPlate = {};
+  if (data && Array.isArray(data.rows)) data.rows.forEach(r => { if (r.plate) liveByPlate[r.plate] = r; });
+  return { data, liveByPlate };
+}
+
+function previewInofleetGpsUpdate() {
+  const box = document.getElementById('inofleet-gps-preview');
+  if (!box) return;
+  const { data, liveByPlate } = getInofleetLiveMap();
+  box.style.display = 'block';
+  if (!data || !Array.isArray(data.rows) || !data.rows.length) {
+    box.innerHTML = `<div class="no-data" style="padding:1rem">Sem dados Inofleet Live carregados para simular.</div>`;
+    return;
+  }
+  const threshold = Math.max(1, parseInt(document.getElementById('gen-threshold')?.value || '3') || 3);
+  const fleet = ALL_VEHICLES.map((v,i)=>getEff(v,i)).filter(v=>regMatch(v) && v.obs !== 'Removida');
+  const rows = fleet.map(v => {
+    const live = liveByPlate[norm(v.mat || v.plate)];
+    const current = v.msgGPS || (v.gpsOK ? 'GPS OK' : 'Sem estado GPS');
+    let target = current;
+    let reason = '';
+    let cls = 'p-gray';
+    let days = null;
+    let last = '—';
+    if (['Oficina','Sinistro'].includes(v.obs)) {
+      reason = 'Ignorado por estado ' + v.obs;
+    } else if (!live) {
+      reason = 'Sem linha no Inofleet Live';
+      cls = 'p-red';
+    } else {
+      const dt = parseInofleetDate(live.date || live.rawDate);
+      last = live.rawDate || (live.date ? new Date(live.date).toLocaleString('pt-PT') : '—');
+      if (!dt) {
+        reason = 'Sem data válida';
+        cls = 'p-amber';
+      } else {
+        days = Math.floor(Math.max(0, Date.now() - dt.getTime()) / 86400000);
+        if (days <= threshold) {
+          target = 'GPS OK';
+          reason = days === 0 ? 'Comunicou hoje' : `Comunicou há ${days} dias`;
+          cls = current === target ? 'p-green' : 'p-blue';
+        } else {
+          target = 'REVER GPS';
+          reason = `Sem comunicar há ${days} dias`;
+          cls = current === target ? 'p-amber' : 'p-red';
+        }
+      }
+    }
+    const changed = target !== current && !reason.startsWith('Ignorado') && !reason.startsWith('Sem linha') && !reason.startsWith('Sem data');
+    return { v, live, current, target, reason, cls, changed, days, last };
+  });
+  const wouldOk = rows.filter(r=>r.changed && r.target==='GPS OK').length;
+  const wouldRever = rows.filter(r=>r.changed && r.target==='REVER GPS').length;
+  const noChange = rows.filter(r=>!r.changed && r.live && !['Oficina','Sinistro'].includes(r.v.obs)).length;
+  const ignored = rows.filter(r=>['Oficina','Sinistro'].includes(r.v.obs)).length;
+  const missing = rows.filter(r=>!r.live).length;
+  const changedRows = rows.filter(r=>r.changed || !r.live || ['Oficina','Sinistro'].includes(r.v.obs)).slice(0,120);
+  box.innerHTML = `
+    <div class="data-state" style="margin:0 0 .75rem">
+      <div class="data-chip good"><div class="data-chip-label">GPS OK teste</div><div class="data-chip-main">${wouldOk}</div><div class="data-chip-sub">mudariam para OK</div></div>
+      <div class="data-chip ${wouldRever?'danger':'good'}"><div class="data-chip-label">REVER GPS teste</div><div class="data-chip-main">${wouldRever}</div><div class="data-chip-sub">mudariam para rever</div></div>
+      <div class="data-chip"><div class="data-chip-label">Sem alteração</div><div class="data-chip-main">${noChange}</div><div class="data-chip-sub">ficariam iguais</div></div>
+      <div class="data-chip ${missing?'warn':'good'}"><div class="data-chip-label">Sem linha live</div><div class="data-chip-main">${missing}</div><div class="data-chip-sub">não seriam tocadas</div></div>
+      <div class="data-chip"><div class="data-chip-label">Ignoradas</div><div class="data-chip-main">${ignored}</div><div class="data-chip-sub">oficina/sinistro</div></div>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:.6rem">Limite usado: ${threshold} dias. Isto é apenas simulação; nenhuma viatura foi alterada.</div>
+    <div style="overflow:auto;max-height:320px;border:1px solid var(--border);border-radius:var(--r)">
+      <table class="data-table">
+        <thead><tr><th>Matrícula</th><th>Tipo</th><th>Estado atual</th><th>Resultado teste</th><th>Último sinal live</th><th>Motivo</th></tr></thead>
+        <tbody>${changedRows.map(r => `<tr>
+          <td style="font-family:'DM Mono',monospace;font-weight:600">${r.v.mat || r.v.plate}</td>
+          <td><span class="pill p-blue">${r.v.tipo || '—'}</span></td>
+          <td>${r.current}</td>
+          <td><span class="pill ${r.cls}">${r.target}</span></td>
+          <td style="white-space:nowrap">${r.last}</td>
+          <td>${r.reason}</td>
+        </tr>`).join('') || `<tr><td colspan="6" class="no-data">Nenhuma diferença relevante nesta simulação.</td></tr>`}</tbody>
+      </table>
+    </div>`;
+}
+
 function renderInofleetLive() {
   const data = ls(K_INOFLEET_LIVE);
   const sum = document.getElementById('inofleet-summary');
@@ -3742,6 +3835,7 @@ function renderInofleetLive() {
       <td>${r.action ? `<span class="pill p-amber">${r.action}</span>` : '<span class="pill p-green">Sem ação</span>'}</td>
     </tr>`;
   }).join('') || `<tr><td colspan="9" class="no-data">Sem resultados neste filtro.</td></tr>`;
+  if (document.getElementById('inofleet-gps-preview')?.style.display === 'block') previewInofleetGpsUpdate();
 }
 
 // ── EXPORTAR LISTA FILTRADA ───────────────────────────────────────────────────
