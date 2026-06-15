@@ -2347,12 +2347,16 @@ function migrateEditsIfNeeded() {
   if (!ALL_VEHICLES.length) return;
   const keys = Object.keys(edits);
   if (!keys.length) return;
-  if (!keys.every(k => /^\d+$/.test(k))) return; // já está por mat
+  if (!keys.some(k => /^\d+$/.test(k))) return; // já está por mat
   const newEdits = {};
   keys.forEach(k => {
-    const v = ALL_VEHICLES[parseInt(k)];
-    const mat = v ? eKey(v) : '';
-    if (mat) newEdits[mat] = edits[k];
+    if (/^\d+$/.test(k)) {
+      const v = ALL_VEHICLES[parseInt(k)];
+      const mat = v ? eKey(v) : '';
+      if (mat) newEdits[mat] = { ...(newEdits[mat] || {}), ...edits[k] };
+    } else {
+      newEdits[k] = edits[k];
+    }
   });
   edits = newEdits;
   ls(K_EDITS, edits);
@@ -2360,7 +2364,7 @@ function migrateEditsIfNeeded() {
 }
 function getWeekNum(d) { d=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())); d.setUTCDate(d.getUTCDate()+4-(d.getUTCDay()||7)); return Math.ceil((((d-new Date(Date.UTC(d.getUTCFullYear(),0,1)))/86400000)+1)/7); }
 function getEff(v,i) {
-  const e=edits[eKey(v)] ?? edits[i] ?? null;
+  const e=edits[eKey(v)] || null;
   if(!e)return {...v,obs:fixText(v.obs),notes:fixText(v.notes||''),tipo:fixText(v.tipo)};
   const msgGPS  = e.gps!==undefined   ? e.gps   : v.msgGPS;
   const msgPorta= e.porta!==undefined ? e.porta : v.msgPorta;
@@ -2372,12 +2376,13 @@ function getEff(v,i) {
   //   - mensagem de problema ('REVER GPS', 'Instalar GPS', etc.) → OK = false
   //   - obs 'Resolvido' força tudo OK
   let gpsOK = v.gpsOK, portaOK = v.portaOK, tempOK = v.tempOK;
+  const effTipo = e.galera || v.tipo;
   if (obs === 'Resolvido') {
     // Resolvido só força OK se o veículo não tem REVER GPS activo por dias sem sinal
     const temRevrGPS = (msgGPS === 'REVER GPS') && (v.daysAgo >= 3);
     gpsOK   = temRevrGPS ? false : true;
-    portaOK = _tipoSemPorta(v.tipo) ? false : true;
-    tempOK  = _tipoSemTemp(v.tipo) ? false : true;
+    portaOK = _tipoSemPorta(effTipo) ? false : true;
+    tempOK  = _tipoSemTemp(effTipo) ? false : true;
   } else {
     if (e.gps!==undefined)   gpsOK   = (e.gps==='' || e.gps==='GPS OK');
     if (e.porta!==undefined) portaOK = (e.porta==='' || e.porta==='Porta OK');
@@ -2743,12 +2748,19 @@ async function saveWeek() {
   hist=hist.filter(e=>!(e.week===entry.week&&e.year===entry.year));
   hist.push(entry); hist.sort((a,b)=>a.year!==b.year?a.year-b.year:a.week-b.week);
   ls(K_HISTORY,hist);
-  // ── CRÍTICO: sincronizar histórico com Supabase ──
+  // ── Guardar histórico de tendência ──
   try {
     await syncToSupabase(K_HISTORY, hist);
-    showSync('Histórico guardado na cloud ✓', '#22c55e');
   } catch(e) { showSync('Histórico só em localStorage', '#f59e0b'); }
-  alert(`✅ Semana ${meta.weekNum} guardada na cloud!\nHistórico: ${hist.length} semanas.`);
+  // ── Guardar snapshot semanal de veículos na cloud (fleet_weekly + fleet_state) ──
+  try {
+    await saveWeekToSupabase(meta.weekNum, meta.year);
+    showSync(`Sem ${meta.weekNum} guardada na cloud ✓`, '#22c55e');
+    alert(`✅ Semana ${meta.weekNum} guardada na cloud!\n📊 ${ALL_VEHICLES.length} veículos · Histórico: ${hist.length} semanas.`);
+  } catch(e) {
+    showSync('Erro ao guardar snapshot semanal', '#ef4444');
+    alert(`⚠️ Histórico guardado mas houve erro no snapshot semanal.\n${e.message || 'Erro desconhecido'}`);
+  }
   if(document.getElementById('page-trend').classList.contains('active')) renderTrend();
 }
 function clearHistory() { if(confirm('Limpar todo o histórico?')){ls(K_HISTORY,[]);syncToSupabase(K_HISTORY,[]);renderTrend();} }
