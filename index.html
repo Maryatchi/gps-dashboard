@@ -3686,13 +3686,31 @@ function clearInofleetLive() {
   renderInofleetLive();
 }
 
+function businessDaysSince(fromDate, toDate = new Date()) {
+  if (!fromDate || isNaN(fromDate)) return null;
+  const start = new Date(fromDate);
+  const end = new Date(toDate);
+  start.setHours(0,0,0,0);
+  end.setHours(0,0,0,0);
+  if (start >= end) return 0;
+  let days = 0;
+  const cur = new Date(start);
+  cur.setDate(cur.getDate() + 1);
+  while (cur <= end) {
+    const dow = cur.getDay();
+    if (dow !== 0 && dow !== 6) days++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return days;
+}
+
 function inofleetLiveStatus(live, thresholdDays) {
   if (!live) return { gps:'Sem linha Inofleet', cls:'p-red', days:null, hours:null };
   const dt = parseInofleetDate(live.date || live.rawDate);
   if (!dt) return { gps:'Sem data', cls:'p-amber', days:null, hours:null };
   const diffH = Math.max(0, (Date.now() - dt.getTime()) / 36e5);
-  const days = Math.floor(diffH / 24);
-  const ok = diffH <= thresholdDays * 24;
+  const days = businessDaysSince(dt);
+  const ok = days <= thresholdDays;
   return { gps: ok ? 'GPS OK live' : 'REVER GPS live', cls: ok ? 'p-green' : 'p-amber', days, hours:diffH };
 }
 
@@ -3713,7 +3731,7 @@ function previewInofleetGpsUpdate() {
     return;
   }
   const threshold = Math.max(1, parseInt(document.getElementById('gen-threshold')?.value || '3') || 3);
-  const fleet = ALL_VEHICLES.map((v,i)=>getEff(v,i)).filter(v=>regMatch(v) && v.obs !== 'Removida');
+  const fleet = ALL_VEHICLES.map((v,i)=>getEff(v,i)).filter(v=>regMatch(v) && !['Oficina','Sinistro','Removida'].includes(v.obs));
   const rows = fleet.map(v => {
     const live = liveByPlate[norm(v.mat || v.plate)];
     const current = v.msgGPS || (v.gpsOK ? 'GPS OK' : 'Sem estado GPS');
@@ -3722,9 +3740,7 @@ function previewInofleetGpsUpdate() {
     let cls = 'p-gray';
     let days = null;
     let last = '—';
-    if (['Oficina','Sinistro'].includes(v.obs)) {
-      reason = 'Ignorado por estado ' + v.obs;
-    } else if (!live) {
+    if (!live) {
       reason = 'Sem linha no Inofleet Live';
       cls = 'p-red';
     } else {
@@ -3734,14 +3750,14 @@ function previewInofleetGpsUpdate() {
         reason = 'Sem data válida';
         cls = 'p-amber';
       } else {
-        days = Math.floor(Math.max(0, Date.now() - dt.getTime()) / 86400000);
+        days = businessDaysSince(dt);
         if (days <= threshold) {
           target = 'GPS OK';
-          reason = days === 0 ? 'Comunicou hoje' : `Comunicou há ${days} dias`;
+          reason = days === 0 ? 'Comunicou hoje' : `Comunicou há ${days} dias úteis`;
           cls = current === target ? 'p-green' : 'p-blue';
         } else {
           target = 'REVER GPS';
-          reason = `Sem comunicar há ${days} dias`;
+          reason = `Sem comunicar há ${days} dias úteis`;
           cls = current === target ? 'p-amber' : 'p-red';
         }
       }
@@ -3751,10 +3767,10 @@ function previewInofleetGpsUpdate() {
   });
   const wouldOk = rows.filter(r=>r.changed && r.target==='GPS OK').length;
   const wouldRever = rows.filter(r=>r.changed && r.target==='REVER GPS').length;
-  const noChange = rows.filter(r=>!r.changed && r.live && !['Oficina','Sinistro'].includes(r.v.obs)).length;
-  const ignored = rows.filter(r=>['Oficina','Sinistro'].includes(r.v.obs)).length;
+  const noChange = rows.filter(r=>!r.changed && r.live).length;
   const missing = rows.filter(r=>!r.live).length;
-  const changedRows = rows.filter(r=>r.changed || !r.live || ['Oficina','Sinistro'].includes(r.v.obs)).slice(0,120);
+  const ignored = ALL_VEHICLES.map((v,i)=>getEff(v,i)).filter(v=>regMatch(v) && ['Oficina','Sinistro'].includes(v.obs)).length;
+  const changedRows = rows.filter(r=>r.changed || !r.live).slice(0,120);
   box.innerHTML = `
     <div class="data-state" style="margin:0 0 .75rem">
       <div class="data-chip good"><div class="data-chip-label">GPS OK teste</div><div class="data-chip-main">${wouldOk}</div><div class="data-chip-sub">mudariam para OK</div></div>
@@ -3763,7 +3779,7 @@ function previewInofleetGpsUpdate() {
       <div class="data-chip ${missing?'warn':'good'}"><div class="data-chip-label">Sem linha live</div><div class="data-chip-main">${missing}</div><div class="data-chip-sub">não seriam tocadas</div></div>
       <div class="data-chip"><div class="data-chip-label">Ignoradas</div><div class="data-chip-main">${ignored}</div><div class="data-chip-sub">oficina/sinistro</div></div>
     </div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:.6rem">Limite usado: ${threshold} dias. Isto é apenas simulação; nenhuma viatura foi alterada.</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:.6rem">Limite usado: ${threshold} dias úteis. Oficina/Sinistro ficam excluídas. Isto é apenas simulação; nenhuma viatura foi alterada.</div>
     <div style="overflow:auto;max-height:320px;border:1px solid var(--border);border-radius:var(--r)">
       <table class="data-table">
         <thead><tr><th>Matrícula</th><th>Tipo</th><th>Estado atual</th><th>Resultado teste</th><th>Último sinal live</th><th>Motivo</th></tr></thead>
@@ -3792,7 +3808,8 @@ function renderInofleetLive() {
   const liveByPlate = {};
   data.rows.forEach(r => { if (r.plate) liveByPlate[r.plate] = r; });
   const threshold = Math.max(1, parseInt(document.getElementById('gen-threshold')?.value || '3') || 3);
-  const fleet = ALL_VEHICLES.map((v,i)=>getEff(v,i)).filter(v=>regMatch(v) && v.obs !== 'Removida');
+  const ignoredOperational = ALL_VEHICLES.map((v,i)=>getEff(v,i)).filter(v=>regMatch(v) && ['Oficina','Sinistro'].includes(v.obs)).length;
+  const fleet = ALL_VEHICLES.map((v,i)=>getEff(v,i)).filter(v=>regMatch(v) && !['Oficina','Sinistro','Removida'].includes(v.obs));
   const rows = fleet.map(v => {
     const plate = norm(v.mat || v.plate);
     const live = liveByPlate[plate];
@@ -3827,8 +3844,8 @@ function renderInofleetLive() {
   const liveRever = rows.filter(r=>r.st.gps==='REVER GPS live').length;
   sum.innerHTML = `
     <div class="data-chip good"><div class="data-chip-label">Inofleet carregado</div><div class="data-chip-main">${data.rows.length} linhas</div><div class="data-chip-sub">${data.source || 'JSON'} · ${fmtDateTime(data.updatedAt)}</div></div>
-    <div class="data-chip ${missing?'warn':'good'}"><div class="data-chip-label">Cruzamento frota</div><div class="data-chip-main">${fleet.length - missing}/${fleet.length} encontradas</div><div class="data-chip-sub">${missing} sem linha Inofleet</div></div>
-    <div class="data-chip ${liveRever?'warn':'good'}"><div class="data-chip-label">GPS live</div><div class="data-chip-main">${liveGps} OK · ${liveRever} rever</div><div class="data-chip-sub">limite ${threshold} dias</div></div>
+    <div class="data-chip ${missing?'warn':'good'}"><div class="data-chip-label">Cruzamento frota</div><div class="data-chip-main">${fleet.length - missing}/${fleet.length} encontradas</div><div class="data-chip-sub">${missing} sem linha · ${ignoredOperational} excluídas</div></div>
+    <div class="data-chip ${liveRever?'warn':'good'}"><div class="data-chip-label">GPS live</div><div class="data-chip-main">${liveGps} OK · ${liveRever} rever</div><div class="data-chip-sub">limite ${threshold} dias úteis</div></div>
     <div class="data-chip ${actions?'warn':'good'}"><div class="data-chip-label">Ações teste</div><div class="data-chip-main">${actions}</div><div class="data-chip-sub">não aplicadas automaticamente</div></div>`;
   body.innerHTML = shown.map(r => {
     const app = r.v.msgGPS || (r.portApplies ? r.v.msgPorta : '') || (r.tempApplies ? r.v.msgTemp : '') || r.v.obs || 'OK';
