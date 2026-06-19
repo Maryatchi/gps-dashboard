@@ -2338,7 +2338,7 @@ function upBadge() {
 
 function setRegion(btn,r) { currentRegion=r; document.querySelectorAll('.rfilt').forEach(b=>b.classList.remove('on')); btn.classList.add('on'); renderAll(); }
 function setVFilt(btn,f)  { currentVFilt=f;  document.querySelectorAll('.vfilt').forEach(b=>b.classList.remove('on')); btn.classList.add('on'); renderVehicles(); }
-function switchTab(id,btn) { document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); document.querySelectorAll('.tab-page').forEach(p=>p.classList.remove('active')); btn.classList.add('active'); document.getElementById('page-'+id).classList.add('active'); if(id==='trend')renderTrend(); if(id==='campo')renderCampo(); if(id==='kmsf'){renderKmsf();renderKmsfMobile();} }
+function switchTab(id,btn) { document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); document.querySelectorAll('.tab-page').forEach(p=>p.classList.remove('active')); btn.classList.add('active'); document.getElementById('page-'+id).classList.add('active'); if(id==='trend')renderTrend(); if(id==='plano')renderPlano(); if(id==='campo')renderCampo(); if(id==='kmsf'){renderKmsf();renderKmsfMobile();} }
 function switchMobileTab(id, btn) {
   document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -4314,7 +4314,7 @@ function movePlano(vIdx, toCol) {
 }
 function clearPlano(){ if(confirm('Limpar todo o planeamento?')){ls(K_PLANO,{});renderPlano();} }
 
-function renderPlano() {
+function renderPlanoLegacy() {
   const filt=document.getElementById('plano-filter')?.value||'all';
   const transp=document.getElementById('plano-transp')?.value||'all';
   const plano=getPlano();
@@ -4415,6 +4415,103 @@ function renderVehicleHistory(plate) {
 }
 
 // ── FEATURE 5: RELATÓRIO POR TRANSPORTADOR ────────────────────────────────────
+function setupPrioridadesView() {
+  const btn=[...document.querySelectorAll('.tab-btn')].find(b => (b.getAttribute('onclick')||'').includes("switchTab('plano'"));
+  if(btn) btn.textContent='Prioridades';
+  const page=document.getElementById('page-plano');
+  if(!page || page.dataset.prioridadesReady==='1') return;
+  page.dataset.prioridadesReady='1';
+  page.innerHTML = `
+    <div style="max-width:1400px;margin:0 auto">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.75rem">
+        <div>
+          <div style="font-size:14px;font-weight:700;margin-bottom:3px">Prioridades de intervenção</div>
+          <div style="font-size:12px;color:var(--muted)">Lista automática do que pede ação agora, sem mexer na base nem criar planeamento manual.</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <input id="prio-search" oninput="renderPlano()" placeholder="Pesquisar matrícula, reboque, nota..." style="background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;padding:7px 10px;outline:none;min-width:220px">
+          <select id="plano-filter" onchange="renderPlano()" style="background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;padding:7px 10px;outline:none">
+            <option value="all">Todos</option>
+            <option value="gps">GPS</option>
+            <option value="sensores">Sensores</option>
+            <option value="paradas">Oficina / Sinistro</option>
+          </select>
+          <select id="plano-transp" onchange="renderPlano()" style="background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;padding:7px 10px;outline:none">
+            <option value="all">Todos os transportadores</option>
+          </select>
+        </div>
+      </div>
+      <div id="prio-summary" class="kpi-strip" style="margin-bottom:1rem"></div>
+      <div id="plano-board" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:.75rem;align-items:start"></div>
+    </div>`;
+}
+
+function renderPlano() {
+  setupPrioridadesView();
+  const filt=document.getElementById('plano-filter')?.value||'all';
+  const transp=document.getElementById('plano-transp')?.value||'all';
+  const q=(document.getElementById('prio-search')?.value||'').toLowerCase().trim();
+  const tSel=document.getElementById('plano-transp');
+  if(tSel && tSel.options.length===1){
+    const transpList=[...new Set(ALL_VEHICLES.map((v,i)=>getEff(v,i).transp).filter(Boolean))].sort();
+    transpList.forEach(t=>{ const o=document.createElement('option'); o.value=t; o.textContent=t; tSel.appendChild(o); });
+  }
+
+  let all=ALL_VEHICLES.map((v,i)=>({...getEff(v,i),idx:i}))
+    .filter(v=>regMatch(v)&&v.obs!=='Removida');
+  if(transp!=='all') all=all.filter(v=>v.transp===transp);
+  if(q) all=all.filter(v=>[v.mat,v.plate,v.reboque,v.transp,v.tipo,v.obs,v.msgGPS,v.msgPorta,v.msgTemp,v.notes].filter(Boolean).join(' ').toLowerCase().includes(q));
+
+  const isGps=v=>v.msgGPS==='Instalar GPS'||v.msgGPS==='REVER GPS';
+  const isSensor=v=>(hasPorta(v)&&v.msgPorta==='REVER S.Porta')||(hasTemp(v)&&v.msgTemp==='REVER Temperaturas');
+  const isStopped=v=>v.obs==='Oficina'||v.obs==='Sinistro';
+  const urgent=all.filter(v=>!isStopped(v)&&(v.msgGPS==='Instalar GPS'||(v.msgGPS==='REVER GPS'&&v.daysAgo>=7)));
+  const gps=all.filter(v=>!isStopped(v)&&isGps(v)&&!urgent.includes(v));
+  const sensors=all.filter(v=>!isStopped(v)&&isSensor(v));
+  const stopped=all.filter(isStopped);
+  const cols=[
+    {id:'urg',label:'A tratar primeiro',color:'#ef4444',items:urgent},
+    {id:'gps',label:'GPS',color:'#f59e0b',items:gps},
+    {id:'sens',label:'Sensores',color:'#14b8a6',items:sensors},
+    {id:'stop',label:'Oficina / Sinistro',color:'#94a3b8',items:stopped}
+  ].map(c=>({...c,items:c.items.filter(v=>filt==='all'||(filt==='gps'&&c.id==='gps'||filt==='gps'&&c.id==='urg')||(filt==='sensores'&&c.id==='sens')||(filt==='paradas'&&c.id==='stop'))}));
+
+  const summary=document.getElementById('prio-summary');
+  if(summary) summary.innerHTML=
+    `<div class="kpi"><div class="kv c-red">${urgent.length}</div><div class="kl">Prioridade</div></div>`+
+    `<div class="kpi"><div class="kv c-amber">${gps.length}</div><div class="kl">GPS</div></div>`+
+    `<div class="kpi"><div class="kv" style="color:#14b8a6">${sensors.length}</div><div class="kl">Sensores</div></div>`+
+    `<div class="kpi"><div class="kv" style="color:#94a3b8">${stopped.length}</div><div class="kl">Paradas</div></div>`;
+
+  const board=document.getElementById('plano-board');
+  if(!board) return;
+  board.innerHTML=cols.map(col=>{
+    const cards=col.items.sort((a,b)=>(b.daysAgo||0)-(a.daysAgo||0)).map(v=>{
+      const problem=[v.msgGPS,hasPorta(v)?v.msgPorta:'',hasTemp(v)?v.msgTemp:'',v.obs].filter(Boolean).join(' · ')||'Sem ação';
+      const reb=v.reboque?`<span style="color:#fcd34d">Reb. ${v.reboque}</span>`:'';
+      const days=(v.daysAgo!==undefined&&v.daysAgo!==9999)?`${v.daysAgo}d sem sinal`:v.daysAgo===9999?'Nunca comunicou':'';
+      const note=v.notes?`<div style="font-size:10px;color:#93c5fd;margin-top:6px;border-top:1px solid var(--border);padding-top:5px">${v.notes}</div>`:'';
+      return `<div onclick="openEdit(${v.idx})" style="background:var(--surface2);border:1px solid var(--border2);border-left:3px solid ${col.color};border-radius:var(--r);padding:10px;margin-bottom:8px;cursor:pointer">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">
+          <span style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700">${v.plate||v.mat}</span>
+          <span style="font-size:10px;color:${(v.daysAgo||0)>30?'#ef4444':(v.daysAgo||0)>7?'#f59e0b':'var(--muted)'}">${days}</span>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:3px">${v.transp||'—'} · ${v.tipo||'—'} ${reb}</div>
+        <div style="font-size:11px;color:${col.color};font-weight:600">${problem}</div>
+        ${note}
+      </div>`;
+    }).join('');
+    return `<div style="background:rgba(255,255,255,.02);border:1px solid var(--border2);border-radius:var(--rl);padding:.75rem;min-height:160px">
+      <div style="font-size:12px;font-weight:700;color:${col.color};margin-bottom:.75rem;display:flex;align-items:center;justify-content:space-between">
+        <span>${col.label}</span><span style="background:${col.color}22;padding:2px 8px;border-radius:99px;font-size:11px">${col.items.length}</span>
+      </div>
+      ${cards||'<div style="font-size:12px;color:var(--hint);text-align:center;padding:1rem">Vazio</div>'}
+    </div>`;
+  }).join('');
+}
+
+setTimeout(setupPrioridadesView, 0);
+
 function exportRelatorioTransportador() {
   const d=getFilt();
   const tMap={};
