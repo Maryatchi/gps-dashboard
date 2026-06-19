@@ -822,6 +822,15 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   </div>
   <input type="file" id="op-fi2" accept=".xlsx,.xls" style="display:none" onchange="stageOpFile(1,this.files[0])">
   <div class="op-staged" id="op-st2"></div>
+  <div style="height:.6rem"></div>
+  <div class="op-section-label">Mapa JMR</div>
+  <div class="op-dz" id="op-dz3" onclick="document.getElementById('op-fi3').click()">
+    <div style="font-size:16px;margin-bottom:3px">ðŸ“‚</div>
+    <div style="font-weight:500;font-size:12px">Clica ou arrasta</div>
+    <div style="color:var(--muted);font-size:11px;margin-top:2px">JMR.ZAS e JMR.TJA</div>
+  </div>
+  <input type="file" id="op-fi3" accept=".xlsx,.xls" style="display:none" onchange="stageOpFile(2,this.files[0])">
+  <div class="op-staged" id="op-st3"></div>
   <div style="height:.75rem"></div>
   <button id="op-apply-btn" onclick="applyOpFiles()" disabled
     style="width:100%;background:var(--amber);border:none;border-radius:var(--r);color:var(--bg);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;padding:10px;cursor:pointer;opacity:.4;transition:opacity .2s">
@@ -1392,8 +1401,13 @@ let meta = { week: '—', date: '—', weekNum: 0, year: 0 };
 let currentRegion = 'NORTE_PDTN', currentVFilt = 'all';
 let editingIdx = null, mSel = { obs:'', gps:'', porta:'', temp:'' };
 let chartGPS=null, chartPorta=null, chartTemp=null, chartVolt=null;
-const stagedLookups = [null, null];
-const stagedNames   = ['', ''];
+const stagedLookups = [null, null, null];
+const stagedNames   = ['', '', ''];
+const OFICINA_GROUPS = [
+  { key:'zas', label:'ZAS/TFS/PDTN' },
+  { key:'tja', label:'TJA' },
+  { key:'jmr', label:'JMR' }
+];
 
 // ── PERSISTENCE ───────────────────────────────────────────────────────────────
 function ls(key, val) {
@@ -2577,26 +2591,67 @@ function clearOneEdit() { if(editingIdx!==null){ const mk=eKey(ALL_VEHICLES[edit
 function resetAllEdits() { if(confirm('Limpar TODAS as edições guardadas?\n\nEsta ação não pode ser desfeita.')){edits={};saveEdits();upBadge();renderAll();} }
 
 // ── OFICINA PANEL ─────────────────────────────────────────────────────────────
-function toggleOpPanel() { document.getElementById('op-panel').classList.toggle('open'); document.getElementById('op-result').style.display='none'; document.getElementById('op-err').style.display='none'; }
+function toggleOpPanel() { setupOficinaPanelLabels(); document.getElementById('op-panel').classList.toggle('open'); document.getElementById('op-result').style.display='none'; document.getElementById('op-err').style.display='none'; }
 document.addEventListener('click',e=>{const p=document.getElementById('op-panel');if(p&&p.classList.contains('open')&&!p.contains(e.target)&&!e.target.closest('.btn-amber'))p.classList.remove('open');});
 
+function setupOficinaPanelLabels() {
+  const panel=document.getElementById('op-panel');
+  if(!panel) return;
+  const sub=panel.querySelector('.op-sub');
+  if(sub) sub.textContent='Carrega os mapas por grupo. Cada ficheiro atualiza apenas as viaturas desse grupo.';
+  const labels=panel.querySelectorAll('.op-section-label');
+  if(labels[0]) labels[0].textContent='Mapa ZAS / TFS / PDTN';
+  if(labels[1]) labels[1].textContent='Mapa TJA';
+  if(labels[2]) labels[2].textContent='Mapa JMR';
+  const hints=[
+    ['op-dz1','ZAS, TFS e PDTN'],
+    ['op-dz2','TJA'],
+    ['op-dz3','JMR.ZAS e JMR.TJA']
+  ];
+  hints.forEach(([id,text])=>{
+    const dz=document.getElementById(id);
+    const hint=dz?.querySelector('div:last-child');
+    if(hint) hint.textContent=text;
+  });
+}
+
+function oficinaGroupMatch(v, idx) {
+  const eff = getEff(v, 0);
+  const t = String(eff.transp || v.transp || '').trim().toUpperCase();
+  const r = String(eff.regiao || v.regiao || '').trim().toUpperCase();
+  const isJmr = t.includes('JMR');
+  if (idx === 0) return !isJmr && !t.includes('TJA') && (t.includes('ZAS') || t === 'TFS' || t.includes('PDTN') || r === 'PDTN');
+  if (idx === 1) return !isJmr && t.includes('TJA');
+  if (idx === 2) return isJmr;
+  return false;
+}
+function refreshOpApplyButton() {
+  const has = stagedLookups.some(Boolean);
+  const btn=document.getElementById('op-apply-btn');
+  if (!btn) return;
+  btn.disabled=!has; btn.style.opacity=has?'1':'0.4'; btn.style.cursor=has?'pointer':'not-allowed';
+}
+
 // Drag & drop
-[['op-dz1',0],['op-dz2',1]].forEach(([id,idx])=>{
+[['op-dz1',0],['op-dz2',1],['op-dz3',2]].forEach(([id,idx])=>{
   const dz=document.getElementById(id);
+  if (!dz) return;
   dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag');});
   dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
   dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag');const f=e.dataTransfer.files[0];if(f)stageOpFile(idx,f);});
 });
 
 function stageOpFile(idx,file) {
-  const dzId=idx===0?'op-dz1':'op-dz2';
-  const stId=idx===0?'op-st1':'op-st2';
+  if (!file) return;
+  const dzId='op-dz'+(idx+1);
+  const stId='op-st'+(idx+1);
   const dz=document.getElementById(dzId);
   dz.innerHTML='<div style="font-size:13px;color:var(--muted)">A ler...</div>';
   const reader=new FileReader();
   reader.onload=e=>{
     const ph=idx===0?'<div style="font-size:16px;margin-bottom:3px">📂</div><div style="font-weight:500;font-size:12px">Clica ou arrasta</div><div style="color:var(--muted);font-size:11px;margin-top:2px">mapa-oficina-norte*.xlsx</div>':'<div style="font-size:16px;margin-bottom:3px">📂</div><div style="font-weight:500;font-size:12px">Clica ou arrasta</div><div style="color:var(--muted);font-size:11px;margin-top:2px">mapa-oficina-jsp*.xlsx</div>';
     dz.innerHTML=ph;
+    setupOficinaPanelLabels();
     try{
       const lookup=parseOficinaXlsx(e.target.result);
       stagedLookups[idx]=lookup; stagedNames[idx]=file.name;
@@ -2604,9 +2659,7 @@ function stageOpFile(idx,file) {
       const st=document.getElementById(stId);
       st.innerHTML=`<span style="font-size:14px">✅</span><span class="op-staged-name"><strong>${file.name}</strong> · ${Object.keys(lookup).length} viaturas</span><span class="op-staged-clear" onclick="clearOpStaged(${idx})" title="Remover">×</span>`;
       st.style.display='flex';
-      const has=stagedLookups[0]||stagedLookups[1];
-      const btn=document.getElementById('op-apply-btn');
-      btn.disabled=!has; btn.style.opacity=has?'1':'0.4'; btn.style.cursor=has?'pointer':'not-allowed';
+      refreshOpApplyButton();
     }catch(err){document.getElementById('op-err').textContent='⚠️ Ficheiro '+(idx+1)+': '+err.message;document.getElementById('op-err').style.display='block';}
   };
   reader.readAsArrayBuffer(file);
@@ -2614,10 +2667,8 @@ function stageOpFile(idx,file) {
 
 function clearOpStaged(idx) {
   stagedLookups[idx]=null; stagedNames[idx]='';
-  document.getElementById(idx===0?'op-st1':'op-st2').style.display='none';
-  const has=stagedLookups[0]||stagedLookups[1];
-  const btn=document.getElementById('op-apply-btn');
-  btn.disabled=!has; btn.style.opacity=has?'1':'0.4';
+  document.getElementById('op-st'+(idx+1)).style.display='none';
+  refreshOpApplyButton();
 }
 
 function applyLookups(l1, l2) {
@@ -2637,7 +2688,7 @@ function applyLookups(l1, l2) {
   });
 }
 
-function applyOpFiles() {
+function applyOpFilesLegacy() {
   const resEl=document.getElementById('op-result');
   const errEl=document.getElementById('op-err');
   resEl.style.display='none'; errEl.style.display='none';
@@ -2665,6 +2716,49 @@ function applyOpFiles() {
 }
 
 // ── TREND ─────────────────────────────────────────────────────────────────────
+function applyOpFiles() {
+  const resEl=document.getElementById('op-result');
+  const errEl=document.getElementById('op-err');
+  resEl.style.display='none'; errEl.style.display='none';
+  const loaded = stagedLookups
+    .map((lookup, idx) => lookup ? { lookup, idx, name: stagedNames[idx] || OFICINA_GROUPS[idx].label } : null)
+    .filter(Boolean);
+  if(!loaded.length){errEl.textContent='Nenhum ficheiro carregado.';errEl.style.display='block';return;}
+
+  let added=0,updated=0,removed=0,unchanged=0,scoped=0;
+  const byGroup = {};
+  loaded.forEach(g => {
+    byGroup[OFICINA_GROUPS[g.idx].key] = { name:g.name, count:Object.keys(g.lookup).length };
+    ALL_VEHICLES.forEach((base,i)=>{
+      if(!oficinaGroupMatch(base, g.idx)) return;
+      scoped++;
+      const v=getEff(base,i);
+      const mn=norm(v.mat), pn=norm(v.plate);
+      const fk=g.lookup[mn]!==undefined?mn:(g.lookup[pn]!==undefined?pn:null);
+      const ek=eKey(base);
+      const cur=(edits[ek]?.obs!==undefined)?edits[ek].obs:base.obs;
+      if(fk){
+        const no=g.lookup[fk];
+        if(!cur){edits[ek]={...(edits[ek]||{}),obs:no};added++;}
+        else if(cur!==no){edits[ek]={...(edits[ek]||{}),obs:no};updated++;}
+        else unchanged++;
+      } else if(cur==='Oficina'||cur==='Sinistro'){
+        edits[ek]={...(edits[ek]||{}),obs:''};
+        removed++;
+      }
+    });
+  });
+
+  upBadge(); renderAll();
+  const ofData={groups:byGroup, lookups:stagedLookups, names:stagedNames};
+  ls(K_OFICINAS,ofData);syncToSupabase(K_OFICINAS,ofData);
+  const newOf=ALL_VEHICLES.map((v2,i)=>(edits[eKey(v2)]?.obs!==undefined?edits[eKey(v2)].obs:v2.obs)).filter(o=>o==='Oficina').length;
+  const newSin=ALL_VEHICLES.map((v2,i)=>(edits[eKey(v2)]?.obs!==undefined?edits[eKey(v2)].obs:v2.obs)).filter(o=>o==='Sinistro').length;
+  const names=loaded.map(g=>OFICINA_GROUPS[g.idx].label+': '+g.name).join(' + ');
+  resEl.innerHTML=`OK <strong>${names}</strong><br>Grupo(s) revistos: <strong>${scoped}</strong> viaturas<br>Novas: <strong>${added}</strong> · Atualizadas: <strong>${updated}</strong> · Saidas: <strong>${removed}</strong><br>Oficina: <strong>${newOf}</strong> · Sinistro: <strong>${newSin}</strong>`;
+  resEl.style.display='block';
+}
+
 function getRegionStats(reg) {
   const lst=ALL_VEHICLES.map((v,i)=>getEff(v,i)).filter(v=>reg==='ALL'?true:reg==='NORTE_PDTN'?v.regiao==='Norte'||v.regiao==='PDTN':v.regiao===reg);
   const t=lst.length||1;
