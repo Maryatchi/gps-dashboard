@@ -859,7 +859,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
           <button class="eopt av-transp-opt" data-val="JMR.ZAS" onclick="avSelTransp(this)">JMR.ZAS</button>
           <button class="eopt av-transp-opt" data-val="JMR.TJA" onclick="avSelTransp(this)">JMR.TJA</button>
         </div>
-        <input id="av-transp" type="text" placeholder="ou escreve aqui..." style="width:100%;margin-top:8px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:8px 12px;outline:none">
+        <input id="av-transp" type="text" placeholder="ou escreve aqui..." style="width:100%;margin-top:8px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:8px 12px;outline:none;text-transform:uppercase" oninput="this.value=this.value.toUpperCase();document.querySelectorAll('.av-transp-opt').forEach(b=>b.className='eopt av-transp-opt')">
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem">
         <div>
@@ -903,6 +903,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     </div>
     <div class="modal-body">
       <div class="current-info" id="m-info"></div>
+      <div class="edit-section">
+        <div class="edit-label">Empresa / Transportador</div>
+        <div class="edit-options" style="margin-bottom:8px">
+          <button class="eopt" onclick="setEditTransp('ZAS')">ZAS</button>
+          <button class="eopt" onclick="setEditTransp('TJA')">TJA</button>
+          <button class="eopt" onclick="setEditTransp('TFS')">TFS</button>
+          <button class="eopt" onclick="setEditTransp('JMR.ZAS')">JMR.ZAS</button>
+          <button class="eopt" onclick="setEditTransp('JMR.TJA')">JMR.TJA</button>
+        </div>
+        <input id="m-transp" type="text" placeholder="Ex: ZAS, TJA, TFS..." style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:9px 12px;outline:none;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
+      </div>
       <div class="edit-section"><div class="edit-label">Observações / Estado</div><div class="edit-options" id="m-obs"><button class="eopt" data-val="" onclick="sel(this,'obs')">Nenhuma</button><button class="eopt" data-val="Oficina" onclick="sel(this,'obs')">🔧 Oficina</button><button class="eopt" data-val="Sinistro" onclick="sel(this,'obs')">⚠️ Sinistro</button><button class="eopt" data-val="Aguardar" onclick="sel(this,'obs')">⏳ Aguardar</button><button class="eopt" id="m-obs-resolvido" data-val="Resolvido" onclick="sel(this,'obs')">✅ Resolvido</button><button class="eopt" data-val="Removida" onclick="sel(this,'obs')">🗑 Removida</button></div></div>
       <div class="edit-section"><div class="edit-label">GPS</div><div class="edit-options" id="m-gps"><button class="eopt" data-val="" onclick="sel(this,'gps')">Nenhuma</button><button class="eopt" data-val="Instalar GPS" onclick="sel(this,'gps')">Instalar GPS</button><button class="eopt" data-val="REVER GPS" onclick="sel(this,'gps')">REVER GPS</button><button class="eopt" data-val="GPS OK" onclick="sel(this,'gps')">GPS OK</button></div></div>
       <div class="edit-section"><div class="edit-label">Porta</div><div class="edit-options" id="m-porta"><button class="eopt" data-val="" onclick="sel(this,'porta')">Nenhuma</button><button class="eopt" data-val="REVER S.Porta" onclick="sel(this,'porta')">REVER S.Porta</button><button class="eopt" data-val="Porta OK" onclick="sel(this,'porta')">Porta OK</button></div></div>
@@ -1371,7 +1382,7 @@ const K_HISTORY   = 'fleet_history_v2';
 const K_OFICINAS  = 'fleet_oficinas_v2'; // staged oficina lookups
 const K_EXTRAS    = 'fleet_extras_v1';    // viaturas adicionadas manualmente
 const K_LOCAL_DIRTY = 'fleet_local_dirty_v1'; // existe base local ainda não enviada para a cloud
-const K_INTERNAL    = 'fleet_internal_v2';    // dados internos permanentes: reboque, notes, tipoGalera por matrícula
+const K_INTERNAL    = 'fleet_internal_v2';    // dados internos permanentes: reboque, notes, tipoGalera, transportador por matrícula
 const K_CLOUD_RESET = 'fleet_cloud_reset_v1'; // marcador cloud para limpar edits/extras locais antigos uma vez
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
@@ -1400,7 +1411,7 @@ function saveEdits() {
   showSync('Guardado');
 }
 
-// Guarda reboque/notes/tipoGalera numa chave permanente independente do ciclo semanal
+// Guarda reboque/notes/tipoGalera/transportador numa chave permanente independente do ciclo semanal
 function saveInternal() {
   const internal = {};
   ALL_VEHICLES.forEach((v, i) => {
@@ -1410,17 +1421,19 @@ function saveInternal() {
     const reboque = e.reboque !== undefined ? e.reboque : (v.reboque || '');
     const notes   = e.notes   !== undefined ? e.notes   : (v.notes   || '');
     const galera  = e.galera  || (['Frio','Lona','Iso'].includes(v.tipo) ? v.tipo : '');
+    const transp  = e.transp  !== undefined ? e.transp  : (v.transp  || '');
     const entry = {};
     if (reboque) entry.reboque = reboque;
     if (notes)   entry.notes   = notes;
     if (galera)  entry.galera  = galera;
+    if (transp)  entry.transp  = transp;
     if (Object.keys(entry).length) internal[mat] = entry;
   });
   ls(K_INTERNAL, internal);
   return internal;
 }
 
-// Aplica dados internos guardados a um array de viaturas (reboque/notes/tipoGalera)
+// Aplica dados internos guardados a um array de viaturas (reboque/notes/tipoGalera/transportador)
 function applyInternal(vehicles) {
   const internal = ls(K_INTERNAL);
   if (!internal || !vehicles || !vehicles.length) return vehicles;
@@ -1435,6 +1448,7 @@ function applyInternal(vehicles) {
       ...v,
       reboque: v.reboque || entry.reboque || '',
       notes:   v.notes   || entry.notes   || '',
+      transp:  v.transp  || entry.transp  || '',
       tipo:    (internalTipoSpecific && cloudTipoGeneric) ? entry.galera : v.tipo,
     };
   });
@@ -2265,11 +2279,12 @@ function migrateEditsIfNeeded() {
 function getWeekNum(d) { d=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())); d.setUTCDate(d.getUTCDate()+4-(d.getUTCDay()||7)); return Math.ceil((((d-new Date(Date.UTC(d.getUTCFullYear(),0,1)))/86400000)+1)/7); }
 function getEff(v,i) {
   const e=edits[eKey(v)] || null;
-  if(!e)return {...v,obs:fixText(v.obs),notes:fixText(v.notes||''),tipo:fixText(v.tipo)};
+  if(!e)return {...v,obs:fixText(v.obs),notes:fixText(v.notes||''),tipo:fixText(v.tipo),transp:fixText(v.transp||'')};
   const msgGPS  = e.gps!==undefined   ? e.gps   : v.msgGPS;
   const msgPorta= e.porta!==undefined ? e.porta : v.msgPorta;
   const msgTemp = e.temp!==undefined  ? e.temp  : v.msgTemp;
   const obs     = e.obs!==undefined   ? e.obs   : v.obs;
+  const transp  = e.transp!==undefined ? e.transp : v.transp;
   // Derivar booleanos a partir das correções (para a % e gráficos ficarem coerentes com a lista)
   // Regra: se a correção define a mensagem de problema, o booleano segue-a.
   //   - mensagem vazia ('') após edição = problema resolvido → OK = true
@@ -2288,7 +2303,7 @@ function getEff(v,i) {
     if (e.porta!==undefined) portaOK = (e.porta==='' || e.porta==='Porta OK');
     if (e.temp!==undefined)  tempOK  = (e.temp==='' || e.temp==='Temp OK');
   }
-  return{...v,obs:fixText(obs),msgGPS,msgPorta,msgTemp,gpsOK,portaOK,tempOK,notes:fixText(e.notes!==undefined?e.notes:v.notes||''),tipo:fixText(e.galera?e.galera:v.tipo)};
+  return{...v,obs:fixText(obs),msgGPS,msgPorta,msgTemp,gpsOK,portaOK,tempOK,transp:fixText(transp||''),notes:fixText(e.notes!==undefined?e.notes:v.notes||''),tipo:fixText(e.galera?e.galera:v.tipo)};
 }
 // Regras de equipamento por tipo de galera:
 // Regras de equipamento por tipo (ver _tipoSemPorta/_tipoSemTemp definidos acima)
@@ -2533,7 +2548,9 @@ function openEdit(i) {
     // Se estava marcado como Resolvido mas agora está bloqueado, limpar
     if (bloqueado && mSel.obs === 'Resolvido') mSel.obs = '';
   }
-  hilite(); document.getElementById('m-notes').value=v.notes||'';
+  hilite();
+  document.getElementById('m-transp').value=v.transp||'';
+  document.getElementById('m-notes').value=v.notes||'';
   document.getElementById('modal-overlay').classList.add('open');
 }
 function hilite() {
@@ -2541,8 +2558,21 @@ function hilite() {
   Object.keys(map).forEach(k=>{document.querySelectorAll(`#${map[k]} .eopt`).forEach(b=>{b.className='eopt';if(b.dataset.val===mSel[k]){if(!b.dataset.val)b.classList.add('sel-none');else if(k==='obs'&&b.dataset.val==='Removida')b.classList.add('sel-gray');else if(k==='obs'&&['Oficina','Sinistro'].includes(b.dataset.val))b.classList.add('sel-red');else if(k==='galera')b.classList.add('sel-blue');else b.classList.add('sel-amber');}});});
 }
 function sel(btn,type) { mSel[type]=btn.dataset.val; hilite(); }
+function setEditTransp(val) { const el=document.getElementById('m-transp'); if(el) el.value=val; }
 function closeModal(e) { if(e&&e.target!==document.getElementById('modal-overlay'))return; document.getElementById('modal-overlay').classList.remove('open'); editingIdx=null; }
-function saveEdit() { if(editingIdx===null)return; const notes=document.getElementById('m-notes').value.trim(); const mk=eKey(ALL_VEHICLES[editingIdx]); if(mk) edits[mk]={obs:mSel.obs,gps:mSel.gps,porta:mSel.porta,temp:mSel.temp,galera:mSel.galera,notes}; saveEdits(); document.getElementById('modal-overlay').classList.remove('open'); upBadge(); renderAll(); editingIdx=null; }
+function saveEdit() {
+  if(editingIdx===null)return;
+  const base=ALL_VEHICLES[editingIdx];
+  const notes=document.getElementById('m-notes').value.trim();
+  const transp=document.getElementById('m-transp').value.trim().toUpperCase();
+  const mk=eKey(base);
+  if(mk) {
+    edits[mk]={...(edits[mk]||{}),obs:mSel.obs,gps:mSel.gps,porta:mSel.porta,temp:mSel.temp,galera:mSel.galera,notes};
+    if(transp !== (base.transp||'')) edits[mk].transp=transp;
+    else delete edits[mk].transp;
+  }
+  saveEdits(); document.getElementById('modal-overlay').classList.remove('open'); upBadge(); renderAll(); editingIdx=null;
+}
 function clearOneEdit() { if(editingIdx!==null){ const mk=eKey(ALL_VEHICLES[editingIdx]); if(mk) delete edits[mk]; saveEdits(); } document.getElementById('modal-overlay').classList.remove('open'); upBadge(); renderAll(); editingIdx=null; }
 function resetAllEdits() { if(confirm('Limpar TODAS as edições guardadas?\n\nEsta ação não pode ser desfeita.')){edits={};saveEdits();upBadge();renderAll();} }
 
@@ -4039,6 +4069,9 @@ function openAddVehicleModal() {
   document.getElementById('av-plate').value = '';
   document.getElementById('av-tipo').value = 'Galera';
   document.getElementById('av-transp').value = '';
+  document.querySelectorAll('.av-transp-opt').forEach(b => b.className = 'eopt av-transp-opt');
+  document.querySelectorAll('.av-galera-opt').forEach(b => b.className = 'eopt av-galera-opt');
+  document.querySelector('.av-galera-opt[data-val=""]')?.classList.add('sel-none');
   document.getElementById('av-regiao').value = 'Norte';
   document.getElementById('av-galera').value = '';
   document.getElementById('av-mat').focus();
@@ -4050,7 +4083,7 @@ function saveAddVehicle() {
   const mat    = document.getElementById('av-mat').value.trim().toUpperCase();
   const plate  = document.getElementById('av-plate').value.trim().toUpperCase();
   const tipo   = document.getElementById('av-tipo').value;
-  const transp = document.getElementById('av-transp').value.trim();
+  const transp = document.getElementById('av-transp').value.trim().toUpperCase();
   const regiao = document.getElementById('av-regiao').value;
   const galera = document.getElementById('av-galera').value;
   if (!mat) { alert('Matrícula obrigatória.'); return; }
@@ -4411,7 +4444,7 @@ setInterval(function() {
   }
 }, 3600000); // 1 hora// ── BACKUP / RESTAURO COMPLETO ────────────────────────────────────────────────
 function backupCompleto() {
-  const allKeys = [K_VEHICLES, K_EDITS, K_META, K_HISTORY, K_OFICINAS, K_EXTRAS, K_REMOVED, K_REG, K_PLANO, K_VH];
+  const allKeys = [K_VEHICLES, K_EDITS, K_META, K_HISTORY, K_OFICINAS, K_EXTRAS, K_REMOVED, K_REG, K_PLANO, K_VH, K_INTERNAL];
   const payload = {
     _formato: 'gps-dashboard-backup',
     _versao: 2,
@@ -4463,7 +4496,7 @@ function restaurarBackup(file) {
       meta = ls(K_META) || meta;
 
       // Sincronizar tudo de volta para o Supabase
-      const syncKeys = [K_VEHICLES, K_EDITS, K_META, K_HISTORY, K_OFICINAS, K_EXTRAS, K_REMOVED, K_REG, K_PLANO, K_VH];
+      const syncKeys = [K_VEHICLES, K_EDITS, K_META, K_HISTORY, K_OFICINAS, K_EXTRAS, K_REMOVED, K_REG, K_PLANO, K_VH, K_INTERNAL];
       Promise.all(syncKeys.map(function(k){
         const v = ls(k);
         return v !== null ? syncToSupabase(k, v) : Promise.resolve();
