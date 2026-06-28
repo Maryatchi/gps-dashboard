@@ -4200,7 +4200,7 @@ function setCampoFilt(btn, f) {
 function renderCampo() {
   const search = (document.getElementById('campo-search')?.value || '').toLowerCase().trim();
   const all = ALL_VEHICLES.map((v, i) => ({ ...getEff(v, i), _i: i }))
-    .filter(v => v.obs !== 'Removida');
+    .filter(v => (v.regiao === 'Norte' || v.regiao === 'PDTN') && v.obs !== 'Removida');
 
   // summary sempre sobre todos os problemas (sem filtro de search)
   const allProb = all.filter(v => !['Oficina','Sinistro'].includes(v.obs));
