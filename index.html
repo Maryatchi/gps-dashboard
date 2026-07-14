@@ -898,6 +898,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       </div>
     </div>
     <div class="modal-footer">
+      <button class="btn-clear-edit" id="btn-remove-active" onclick="removeFromActiveFleet()">Remover da frota ativa</button>
+      <button class="btn-clear-edit" id="btn-restore-active" onclick="restoreToActiveFleet()" style="display:none;border-color:rgba(34,197,94,.35);color:#86efac">Reativar</button>
       <button class="btn-cancel" onclick="closeAddVehicleModal()">Cancelar</button>
       <button class="btn-save" onclick="saveAddVehicle()">➕ Adicionar</button>
     </div>
@@ -2328,7 +2330,7 @@ const isAtivo  = v => !['Oficina','Sinistro'].includes(v.obs);
 function regMatch(v) { if(currentRegion==='ALL')return true; if(currentRegion==='NORTE_PDTN')return v.regiao==='Norte'||v.regiao==='PDTN'; return v.regiao===currentRegion; }
 function getFilt() {
   return ALL_VEHICLES.map((v,i)=>getEff(v,i))
-    .filter(v => regMatch(v) && v.obs !== 'Removida');
+    .filter(v => regMatch(v) && !isRemovedActive(v));
 }
 function bc(p) { return p>=85?'#22c55e':p>=65?'#f59e0b':'#ef4444'; }
 
@@ -2479,7 +2481,8 @@ function renderVehicles() {
     return regMatch(v)&&(tFilt==='all'||v.transp===tFilt);
   });
   const f=currentVFilt;
-  const noOficina = i => !['Oficina','Sinistro','Removida'].includes(eff[i].obs);
+  if(f !== 'removida') idx=idx.filter(i=>!isRemovedActive(eff[i]));
+  const noOficina = i => !['Oficina','Sinistro'].includes(eff[i].obs) && !isRemovedActive(eff[i]);
   if(f==='todos_gps') idx=idx.filter(i=>!!eff[i].msgGPS&&noOficina(i));
   else if(f==='instalar') idx=idx.filter(i=>eff[i].msgGPS==='Instalar GPS'&&noOficina(i));
   else if(f==='rever_gps') idx=idx.filter(i=>eff[i].msgGPS==='REVER GPS'&&noOficina(i));
@@ -2488,7 +2491,7 @@ function renderVehicles() {
   else if(f==='bateria') idx=idx.filter(i=>eff[i].msgVolt==='REVER Bateria'&&noOficina(i));
   else if(f==='oficina') idx=idx.filter(i=>eff[i].obs==='Oficina');
   else if(f==='sinistro') idx=idx.filter(i=>eff[i].obs==='Sinistro');
-  else if(f==='removida') idx=idx.filter(i=>eff[i].obs==='Removida');
+  else if(f==='removida') idx=idx.filter(i=>isRemovedActive(eff[i]));
   else if(f==='editados') idx=idx.filter(i=>!!edits[eKey(ALL_VEHICLES[i])]);
   else if(f==='ok') idx=idx.filter(i=>{const v=eff[i];return!v.status&&!v.obs&&!v.msgGPS&&!v.msgPorta&&!v.msgTemp;});
   if(q) idx=idx.filter(i=>{
@@ -2509,14 +2512,15 @@ function renderVehicles() {
   document.getElementById('vbody').innerHTML=idx.map(i=>{
     const v=eff[i],isEd=!!edits[eKey(ALL_VEHICLES[i])];
     let st='';
-    if(v.obs==='Oficina') st='<span class="pill p-gray">Oficina</span>';
+    if(isRemovedActive(v)) st='<span class="pill" style="background:rgba(156,163,175,.1);color:#6b7280;border:1px solid rgba(107,114,128,.2)">Removida</span>';
+    else if(v.obs==='Oficina') st='<span class="pill p-gray">Oficina</span>';
     else if(v.obs==='Sinistro') st='<span class="pill p-red">Sinistro</span>';
     else if(v.obs==='Aguardar') st='<span class="pill p-amber">Aguardar</span>';
     else if(v.obs==='Resolvido') st='<span class="pill p-green">Resolvido</span>';
     else if(v.obs==='Removida') st='<span class="pill" style="background:rgba(156,163,175,.1);color:#6b7280;border:1px solid rgba(107,114,128,.2)">🗑 Removida</span>';
     else{const p=[];if(v.msgGPS==='Instalar GPS')p.push('<span class="pill p-red">Instalar GPS</span>');if(v.msgGPS==='REVER GPS')p.push('<span class="pill p-red">REVER GPS</span>');if(v.msgPorta==='REVER S.Porta')p.push('<span class="pill p-amber">Porta</span>');if(v.msgTemp==='REVER Temperaturas')p.push('<span class="pill p-amber">Temp</span>');if(v.msgVolt==='REVER Bateria')p.push('<span class="pill p-amber">Bateria</span>');st=p.length?p.join(' '):'<span class="pill p-green">OK</span>';}
     if(v.notes) st+=' <span class="pill p-blue">📝</span>';
-    const dot=v.obs==='Oficina'?'#6b7280':v.obs==='Sinistro'?'#ef4444':v.obs==='Resolvido'?'#22c55e':v.msgGPS?'#ef4444':v.msgPorta||v.msgTemp||v.msgVolt?'#f59e0b':'#22c55e';
+    const dot=isRemovedActive(v)?'#6b7280':v.obs==='Oficina'?'#6b7280':v.obs==='Sinistro'?'#ef4444':v.obs==='Resolvido'?'#22c55e':v.msgGPS?'#ef4444':v.msgPorta||v.msgTemp||v.msgVolt?'#f59e0b':'#22c55e';
     const plate=v.plate||v.mat;
     const tc=v.tipo==='Tractor'?'p-blue':v.tipo==='Galera'?'p-gray':'p-teal';
     const notesCol=v.notes
@@ -2540,19 +2544,22 @@ function renderVehicles() {
 // ── MODAL ─────────────────────────────────────────────────────────────────────
 function openEdit(i) {
   editingIdx=i; const v=getEff(ALL_VEHICLES[i],i);
+  const removedActive = isRemovedActive(v);
+  const removedInfo = getRemovedDetails()[vKey(v)] || null;
   document.getElementById('m-title').textContent=v.plate||v.mat;
   document.getElementById('m-plate').textContent=`${v.transp} · ${v.regiao} · ${v.tipo}`;
   const daysStr=v.daysAgo===9999?'Nunca comunicou':v.daysAgo===0?'Hoje':v.daysAgo===undefined?'—':`${v.daysAgo} dias atrás (${v.lastSeen||''})`;
   const daysCol=v.daysAgo>30?'#ef4444':v.daysAgo>7?'#f59e0b':'var(--text)';
   const rebStr=v.reboque?'<div class="ci-row"><span class="ci-key">Nº Reboque</span><span class="ci-val" style="color:#fcd34d;font-weight:600">'+v.reboque+'</span></div>':'';
   const notesStr=v.notes?'<div class="ci-row"><span class="ci-key">Notas</span><span class="ci-val">'+v.notes+'</span></div>':'';
+  const removedStr=removedActive?'<div class="ci-row"><span class="ci-key">Frota ativa</span><span class="ci-val" style="color:#fca5a5">Removida'+(removedInfo?.reason?' - '+removedInfo.reason:'')+'</span></div>':'';
   document.getElementById('m-info').innerHTML=
     '<div class="ci-row"><span class="ci-key">Observações</span><span class="ci-val">'+(v.obs||'—')+'</span></div>'+
     '<div class="ci-row"><span class="ci-key">GPS</span><span class="ci-val">'+(v.msgGPS||'—')+'</span></div>'+
     '<div class="ci-row"><span class="ci-key">Último sinal</span><span class="ci-val" style="color:'+daysCol+'">'+daysStr+'</span></div>'+
     '<div class="ci-row"><span class="ci-key">Porta</span><span class="ci-val">'+(v.msgPorta||'—')+'</span></div>'+
     '<div class="ci-row"><span class="ci-key">Temp</span><span class="ci-val">'+(v.msgTemp||'—')+'</span></div>'+
-    rebStr+notesStr
+    rebStr+notesStr+removedStr
   mSel={obs:v.obs||'',gps:v.msgGPS||'',porta:v.msgPorta||'',temp:v.msgTemp||'',galera:['Frio','Iso','Lona'].includes(v.tipo)?v.tipo:''};
   // Esconder 'Resolvido' se veículo tem REVER GPS por dias sem sinal (daysAgo >= 3)
   const btnResolvido = document.getElementById('m-obs-resolvido');
@@ -2565,6 +2572,10 @@ function openEdit(i) {
   hilite();
   document.getElementById('m-transp').value=v.transp||'';
   document.getElementById('m-notes').value=v.notes||'';
+  const btnRemove = document.getElementById('btn-remove-active');
+  const btnRestore = document.getElementById('btn-restore-active');
+  if (btnRemove) btnRemove.style.display = removedActive ? 'none' : '';
+  if (btnRestore) btnRestore.style.display = removedActive ? '' : 'none';
   document.getElementById('modal-overlay').classList.add('open');
 }
 function hilite() {
@@ -2584,8 +2595,37 @@ function saveEdit() {
     edits[mk]={...(edits[mk]||{}),obs:mSel.obs,gps:mSel.gps,porta:mSel.porta,temp:mSel.temp,galera:mSel.galera,notes};
     if(transp !== (base.transp||'')) edits[mk].transp=transp;
     else delete edits[mk].transp;
+    if(mSel.obs === 'Removida') setVehicleRemoved(getEff(base, editingIdx), 'Removida no editor', notes || '');
   }
   saveEdits(); document.getElementById('modal-overlay').classList.remove('open'); upBadge(); renderAll(); editingIdx=null;
+}
+function removeFromActiveFleet() {
+  if(editingIdx===null)return;
+  const base=ALL_VEHICLES[editingIdx];
+  const v=getEff(base,editingIdx);
+  const reason=prompt('Motivo da remoção da frota ativa:\nDesinstalada / Fora da frota fixa / Erro de matrícula / Duplicada / Outro','Fora da frota fixa');
+  if(reason===null)return;
+  const note=prompt('Nota opcional para histórico','');
+  if(setVehicleRemoved(v, reason.trim() || 'Removida da frota ativa', note || '')) {
+    saveEdits();
+    document.getElementById('modal-overlay').classList.remove('open');
+    showSync('Removida da frota ativa');
+    renderAll();
+    editingIdx=null;
+  }
+}
+function restoreToActiveFleet() {
+  if(editingIdx===null)return;
+  const base=ALL_VEHICLES[editingIdx];
+  const v=getEff(base,editingIdx);
+  if(!confirm('Reativar esta matrícula na frota ativa?'))return;
+  if(unsetVehicleRemoved(v)) {
+    saveEdits();
+    document.getElementById('modal-overlay').classList.remove('open');
+    showSync('Reativada na frota ativa');
+    renderAll();
+    editingIdx=null;
+  }
 }
 function clearOneEdit() { if(editingIdx!==null){ const mk=eKey(ALL_VEHICLES[editingIdx]); if(mk) delete edits[mk]; saveEdits(); } document.getElementById('modal-overlay').classList.remove('open'); upBadge(); renderAll(); editingIdx=null; }
 function resetAllEdits() { if(confirm('Limpar TODAS as edições guardadas?\n\nEsta ação não pode ser desfeita.')){edits={};saveEdits();upBadge();renderAll();} }
@@ -3046,9 +3086,50 @@ function parseGenericFile(file, cb) {
 
 // ── REMOVER VIATURAS ──────────────────────────────────────────────────────────
 const K_REMOVED = 'fleet_removed_v2';
+const K_REMOVED_DETAILS = 'fleet_removed_details_v1';
 
 function getRemoved() { return new Set(ls(K_REMOVED) || []); }
 function saveRemoved(set) { ls(K_REMOVED, [...set]); syncToSupabase(K_REMOVED, [...set]); }
+function getRemovedDetails() { return ls(K_REMOVED_DETAILS) || {}; }
+function saveRemovedDetails(details) { ls(K_REMOVED_DETAILS, details); syncToSupabase(K_REMOVED_DETAILS, details); }
+function vKey(v) { return norm((v && (v.mat || v.plate)) || ''); }
+function isRemovedActive(v) {
+  const key = vKey(v);
+  if (!key) return false;
+  return getRemoved().has(key) || v.obs === 'Removida';
+}
+function setVehicleRemoved(v, reason, note) {
+  const key = vKey(v);
+  if (!key) return false;
+  const removed = getRemoved();
+  const details = getRemovedDetails();
+  removed.add(key);
+  details[key] = {
+    mat: v.mat || '',
+    plate: v.plate || '',
+    reason: reason || 'Removida da frota ativa',
+    note: note || '',
+    removedAt: new Date().toISOString()
+  };
+  saveRemoved(removed);
+  saveRemovedDetails(details);
+  const ek = eKey(v);
+  if (ek) edits[ek] = { ...(edits[ek] || {}), obs: 'Removida', gps: '', porta: '', temp: '' };
+  return true;
+}
+function unsetVehicleRemoved(v) {
+  const key = vKey(v);
+  if (!key) return false;
+  const removed = getRemoved();
+  const details = getRemovedDetails();
+  removed.delete(key);
+  delete details[key];
+  saveRemoved(removed);
+  saveRemovedDetails(details);
+  const ek = eKey(v);
+  if (ek && edits[ek]?.obs === 'Removida') edits[ek] = { ...edits[ek], obs: '' };
+  return true;
+}
 
 function applyRemoverData(rows, fname, stElId, resultElId, errElId) {
   const resEl = document.getElementById(resultElId);
@@ -3070,22 +3151,34 @@ function applyRemoverData(rows, fname, stElId, resultElId, errElId) {
   let toRemove = rows;
   if (colKey) toRemove = rows.filter(r => String(r[colKey]||'').toLowerCase().includes('remov'));
 
-  const removed = getRemoved();
   let added = 0;
+  const toRemoveSet = new Set();
   toRemove.forEach(r => {
     const plate = String(r[plateKey]||'').trim();
     if (!plate || plate === 'null') return;
-    removed.add(norm(plate));
+    toRemoveSet.add(norm(plate));
     added++;
   });
+  const removed = getRemoved();
+  const details = getRemovedDetails();
+  toRemoveSet.forEach(key => {
+    removed.add(key);
+    details[key] = details[key] || {
+      mat: key,
+      plate: key,
+      reason: 'Removida por ficheiro',
+      note: fname,
+      removedAt: new Date().toISOString()
+    };
+  });
   saveRemoved(removed);
+  saveRemovedDetails(details);
 
   // Mark in edits: set obs='Removida' and clear all problem flags
   let matched = 0;
   ALL_VEHICLES.forEach((v, i) => {
-    if (removed.has(norm(v.mat)) || removed.has(norm(v.plate))) {
-      const ek = eKey(v);
-      edits[ek] = { ...(edits[ek]||{}), obs: 'Removida', gps: '', porta: '', temp: '' };
+    if (toRemoveSet.has(norm(v.mat)) || toRemoveSet.has(norm(v.plate))) {
+      setVehicleRemoved(v, 'Removida por ficheiro', fname);
       matched++;
     }
   });
@@ -3554,7 +3647,7 @@ function generateBaseJSON() {
   upBadge(); renderAll();
 
   // Show result
-  const total = ALL_VEHICLES.filter((_,i)=>regMatch(getEff(ALL_VEHICLES[i],i))&&getEff(ALL_VEHICLES[i],i).obs!=='Removida').length;
+  const total = ALL_VEHICLES.filter((_,i)=>{const v=getEff(ALL_VEHICLES[i],i);return regMatch(v)&&!isRemovedActive(v);}).length;
   const gpsP = Math.round(newGpsOK/total*100);
   document.getElementById('gen-result').innerHTML = `
     <div style="background:var(--green-dim);border:1px solid rgba(34,197,94,.25);border-radius:var(--rl);padding:1.25rem;font-size:13px;line-height:1.9;color:#86efac">
@@ -3590,7 +3683,7 @@ async function generateFromCurrent() {
   const year = parseInt(document.getElementById('gen-year').value) || new Date().getFullYear();
 
   // Snapshot do estado atual com edits aplicados
-  const d = ALL_VEHICLES.map((v,i) => getEff(v,i)).filter(v => v.obs !== 'Removida');
+  const d = ALL_VEHICLES.map((v,i) => getEff(v,i)).filter(v => !isRemovedActive(v));
   const total = d.filter(v => regMatch(v)).length;
   const gpsOK = d.filter(v => v.gpsOK && regMatch(v) && !['Oficina','Sinistro'].includes(v.obs)).length;
   const inst = d.filter(v => v.msgGPS === 'Instalar GPS' && regMatch(v) && !['Oficina','Sinistro'].includes(v.obs)).length;
@@ -3644,9 +3737,9 @@ function exportListaFiltrada() {
 
   let idx=ALL_VEHICLES.map((_,i)=>i).filter(i=>{
     const v=getEff(ALL_VEHICLES[i],i);
-    return regMatch(v)&&!['Removida','Oficina','Sinistro'].includes(v.obs)&&(tFilt==='all'||v.transp===tFilt);
+    return regMatch(v)&&(f==='removida'||(!isRemovedActive(v)&&!['Oficina','Sinistro'].includes(v.obs)))&&(tFilt==='all'||v.transp===tFilt);
   });
-  const noOficina = i => !['Oficina','Sinistro','Removida'].includes(getEff(ALL_VEHICLES[i],i).obs);
+  const noOficina = i => { const v=getEff(ALL_VEHICLES[i],i); return !['Oficina','Sinistro'].includes(v.obs)&&!isRemovedActive(v); };
   if(f==='todos_gps') idx=idx.filter(i=>!!getEff(ALL_VEHICLES[i],i).msgGPS&&noOficina(i));
   else if(f==='instalar') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgGPS==='Instalar GPS'&&noOficina(i));
   else if(f==='rever_gps') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgGPS==='REVER GPS'&&noOficina(i));
@@ -3655,7 +3748,7 @@ function exportListaFiltrada() {
   else if(f==='bateria') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).msgVolt==='REVER Bateria'&&noOficina(i));
   else if(f==='oficina') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).obs==='Oficina');
   else if(f==='sinistro') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).obs==='Sinistro');
-  else if(f==='removida') idx=idx.filter(i=>getEff(ALL_VEHICLES[i],i).obs==='Removida');
+  else if(f==='removida') idx=idx.filter(i=>isRemovedActive(getEff(ALL_VEHICLES[i],i)));
   else if(f==='editados') idx=idx.filter(i=>!!edits[eKey(ALL_VEHICLES[i])]);
   else if(f==='ok') idx=idx.filter(i=>{const v=getEff(ALL_VEHICLES[i],i);return!v.status&&!v.obs&&!v.msgGPS&&!v.msgPorta&&!v.msgTemp;});
   if(q) idx=idx.filter(i=>{const v=getEff(ALL_VEHICLES[i],i);return(v.mat+v.plate+v.transp+v.regiao+(v.reboque||'')).toLowerCase().includes(q);});
@@ -4200,7 +4293,7 @@ function setCampoFilt(btn, f) {
 function renderCampo() {
   const search = (document.getElementById('campo-search')?.value || '').toLowerCase().trim();
   const all = ALL_VEHICLES.map((v, i) => ({ ...getEff(v, i), _i: i }))
-    .filter(v => (v.regiao === 'Norte' || v.regiao === 'PDTN') && v.obs !== 'Removida');
+    .filter(v => (v.regiao === 'Norte' || v.regiao === 'PDTN') && !isRemovedActive(v));
 
   // summary sempre sobre todos os problemas (sem filtro de search)
   const allProb = all.filter(v => !['Oficina','Sinistro'].includes(v.obs));
@@ -4328,7 +4421,7 @@ function renderPlanoLegacy() {
 
   // Get vehicles with problems
   let candidates=ALL_VEHICLES.map((v,i)=>({...getEff(v,i),idx:i}))
-    .filter(v=>regMatch(v)&&v.obs!=='Removida'&&v.obs!=='Oficina'&&v.obs!=='Sinistro');
+    .filter(v=>regMatch(v)&&!isRemovedActive(v)&&v.obs!=='Oficina'&&v.obs!=='Sinistro');
 
   if(filt==='gps') candidates=candidates.filter(v=>v.msgGPS);
   else if(filt==='porta') candidates=candidates.filter(v=>v.msgPorta==='REVER S.Porta');
@@ -4458,7 +4551,7 @@ function renderPlano() {
   }
 
   let all=ALL_VEHICLES.map((v,i)=>({...getEff(v,i),idx:i}))
-    .filter(v=>regMatch(v)&&v.obs!=='Removida');
+    .filter(v=>regMatch(v)&&!isRemovedActive(v));
   if(transp!=='all') all=all.filter(v=>v.transp===transp);
   if(q) all=all.filter(v=>[v.mat,v.plate,v.reboque,v.transp,v.tipo,v.obs,v.msgGPS,v.msgPorta,v.msgTemp,v.notes].filter(Boolean).join(' ').toLowerCase().includes(q));
 
@@ -4635,7 +4728,7 @@ setInterval(function() {
   }
 }, 3600000); // 1 hora// ── BACKUP / RESTAURO COMPLETO ────────────────────────────────────────────────
 function backupCompleto() {
-  const allKeys = [K_VEHICLES, K_EDITS, K_META, K_HISTORY, K_OFICINAS, K_EXTRAS, K_REMOVED, K_REG, K_PLANO, K_VH, K_INTERNAL];
+  const allKeys = [K_VEHICLES, K_EDITS, K_META, K_HISTORY, K_OFICINAS, K_EXTRAS, K_REMOVED, K_REMOVED_DETAILS, K_REG, K_PLANO, K_VH, K_INTERNAL];
   const payload = {
     _formato: 'gps-dashboard-backup',
     _versao: 2,
@@ -4687,7 +4780,7 @@ function restaurarBackup(file) {
       meta = ls(K_META) || meta;
 
       // Sincronizar tudo de volta para o Supabase
-      const syncKeys = [K_VEHICLES, K_EDITS, K_META, K_HISTORY, K_OFICINAS, K_EXTRAS, K_REMOVED, K_REG, K_PLANO, K_VH, K_INTERNAL];
+      const syncKeys = [K_VEHICLES, K_EDITS, K_META, K_HISTORY, K_OFICINAS, K_EXTRAS, K_REMOVED, K_REMOVED_DETAILS, K_REG, K_PLANO, K_VH, K_INTERNAL];
       Promise.all(syncKeys.map(function(k){
         const v = ls(k);
         return v !== null ? syncToSupabase(k, v) : Promise.resolve();
