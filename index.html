@@ -825,7 +825,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   <div style="height:.6rem"></div>
   <div class="op-section-label">Mapa JMR</div>
   <div class="op-dz" id="op-dz3" onclick="document.getElementById('op-fi3').click()">
-    <div style="font-size:16px;margin-bottom:3px">ðŸ“‚</div>
+    <div style="font-size:16px;margin-bottom:3px">📂</div>
     <div style="font-weight:500;font-size:12px">Clica ou arrasta</div>
     <div style="color:var(--muted);font-size:11px;margin-top:2px">JMR.ZAS e JMR.TJA</div>
   </div>
@@ -898,8 +898,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn-clear-edit" id="btn-remove-active" onclick="removeFromActiveFleet()">Remover da frota ativa</button>
-      <button class="btn-clear-edit" id="btn-restore-active" onclick="restoreToActiveFleet()" style="display:none;border-color:rgba(34,197,94,.35);color:#86efac">Reativar</button>
       <button class="btn-cancel" onclick="closeAddVehicleModal()">Cancelar</button>
       <button class="btn-save" onclick="saveAddVehicle()">➕ Adicionar</button>
     </div>
@@ -930,9 +928,12 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <div class="edit-section"><div class="edit-label">Porta</div><div class="edit-options" id="m-porta"><button class="eopt" data-val="" onclick="sel(this,'porta')">Nenhuma</button><button class="eopt" data-val="REVER S.Porta" onclick="sel(this,'porta')">REVER S.Porta</button><button class="eopt" data-val="Porta OK" onclick="sel(this,'porta')">Porta OK</button></div></div>
       <div class="edit-section"><div class="edit-label">Temperatura</div><div class="edit-options" id="m-temp"><button class="eopt" data-val="" onclick="sel(this,'temp')">Nenhuma</button><button class="eopt" data-val="REVER Temperaturas" onclick="sel(this,'temp')">REVER Temperaturas</button><button class="eopt" data-val="Temp OK" onclick="sel(this,'temp')">Temp OK</button></div></div>
       <div class="edit-section"><div class="edit-label">Tipologia</div><div class="edit-options" id="m-tipo"><button class="eopt" data-val="" onclick="sel(this,'galera')">Nenhuma</button><button class="eopt" data-val="Frio" onclick="sel(this,'galera')">🧊 Frio</button><button class="eopt" data-val="Iso" onclick="sel(this,'galera')">❄️ Iso</button><button class="eopt" data-val="Lona" onclick="sel(this,'galera')">🏕️ Lona</button></div></div>
+      <div class="edit-section"><div class="edit-label">Nº Reboque</div><input id="m-reboque" type="text" placeholder="Ex: 4264, LE3610..." style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:9px 12px;outline:none;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></div>
       <div class="edit-section"><div class="edit-label">Notas</div><textarea class="notes-input" id="m-notes" placeholder="Notas sobre este veículo..."></textarea></div>
     </div>
     <div class="modal-footer">
+      <button class="btn-clear-edit" id="btn-remove-active" onclick="removeFromActiveFleet()">Remover da frota ativa</button>
+      <button class="btn-clear-edit" id="btn-restore-active" onclick="restoreToActiveFleet()" style="display:none;border-color:rgba(34,197,94,.35);color:#86efac">Reativar</button>
       <button class="btn-clear-edit" onclick="clearOneEdit()">Limpar edições</button>
       <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
       <button class="btn-save" onclick="saveEdit()">Guardar</button>
@@ -2249,7 +2250,7 @@ function fixText(s) {
     'Ã¡':'á','ÃÁ':'Á','Ãà':'à','Ã€':'À','Ã¢':'â','Ã‚':'Â','Ã£':'ã',
     'Ã©':'é','Ã‰':'É','Ãª':'ê','ÃŠ':'Ê','Ãí':'í','Ã':'Í',
     'Ã³':'ó','Ã“':'Ó','Ãµ':'õ','Ã•':'Õ','Ãº':'ú','Ãš':'Ú',
-    'Ã§':'ç','Ã‡':'Ç','Âº':'º','Âª':'ª','Â·':'·','â€™':"'",'â€“':'-','â€”':'-'
+    'Ã§':'ç','Ã‡':'Ç','Âº':'º','Âª':'ª','·':'·','â€™':"'",'â€“':'-','â€”':'-'
   };
   Object.keys(repl).forEach(k => { t = t.split(k).join(repl[k]); });
   const keepCase = (m, word) => m && m[0] === m[0].toUpperCase()
@@ -2295,7 +2296,7 @@ function migrateEditsIfNeeded() {
 function getWeekNum(d) { d=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())); d.setUTCDate(d.getUTCDate()+4-(d.getUTCDay()||7)); return Math.ceil((((d-new Date(Date.UTC(d.getUTCFullYear(),0,1)))/86400000)+1)/7); }
 function getEff(v,i) {
   const e=edits[eKey(v)] || null;
-  if(!e)return {...v,obs:fixText(v.obs),notes:fixText(v.notes||''),tipo:fixText(v.tipo),transp:fixText(v.transp||'')};
+  if(!e)return {...v,obs:fixText(v.obs),notes:fixText(v.notes||''),reboque:fixText(v.reboque||''),tipo:fixText(v.tipo),transp:fixText(v.transp||'')};
   const msgGPS  = e.gps!==undefined   ? e.gps   : v.msgGPS;
   const msgPorta= e.porta!==undefined ? e.porta : v.msgPorta;
   const msgTemp = e.temp!==undefined  ? e.temp  : v.msgTemp;
@@ -2319,7 +2320,7 @@ function getEff(v,i) {
     if (e.porta!==undefined) portaOK = (e.porta==='' || e.porta==='Porta OK');
     if (e.temp!==undefined)  tempOK  = (e.temp==='' || e.temp==='Temp OK');
   }
-  return{...v,obs:fixText(obs),msgGPS,msgPorta,msgTemp,gpsOK,portaOK,tempOK,transp:fixText(transp||''),notes:fixText(e.notes!==undefined?e.notes:v.notes||''),tipo:fixText(e.galera?e.galera:v.tipo)};
+  return{...v,obs:fixText(obs),msgGPS,msgPorta,msgTemp,gpsOK,portaOK,tempOK,transp:fixText(transp||''),notes:fixText(e.notes!==undefined?e.notes:v.notes||''),reboque:fixText(e.reboque!==undefined?e.reboque:v.reboque||''),tipo:fixText(e.galera?e.galera:v.tipo)};
 }
 // Regras de equipamento por tipo de galera:
 // Regras de equipamento por tipo (ver _tipoSemPorta/_tipoSemTemp definidos acima)
@@ -2572,6 +2573,7 @@ function openEdit(i) {
   hilite();
   document.getElementById('m-transp').value=v.transp||'';
   document.getElementById('m-notes').value=v.notes||'';
+  const rebInput=document.getElementById('m-reboque'); if(rebInput) rebInput.value=v.reboque||'';
   const btnRemove = document.getElementById('btn-remove-active');
   const btnRestore = document.getElementById('btn-restore-active');
   if (btnRemove) btnRemove.style.display = removedActive ? 'none' : '';
@@ -2589,10 +2591,11 @@ function saveEdit() {
   if(editingIdx===null)return;
   const base=ALL_VEHICLES[editingIdx];
   const notes=document.getElementById('m-notes').value.trim();
+  const reboque=document.getElementById('m-reboque')?.value.trim().toUpperCase() || '';
   const transp=document.getElementById('m-transp').value.trim().toUpperCase();
   const mk=eKey(base);
   if(mk) {
-    edits[mk]={...(edits[mk]||{}),obs:mSel.obs,gps:mSel.gps,porta:mSel.porta,temp:mSel.temp,galera:mSel.galera,notes};
+    edits[mk]={...(edits[mk]||{}),obs:mSel.obs,gps:mSel.gps,porta:mSel.porta,temp:mSel.temp,galera:mSel.galera,notes,reboque};
     if(transp !== (base.transp||'')) edits[mk].transp=transp;
     else delete edits[mk].transp;
     if(mSel.obs === 'Removida') setVehicleRemoved(getEff(base, editingIdx), 'Removida no editor', notes || '');
