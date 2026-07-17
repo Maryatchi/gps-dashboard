@@ -2803,14 +2803,17 @@ function applyOpFiles() {
 }
 
 function getRegionStats(reg) {
-  const lst=ALL_VEHICLES.map((v,i)=>getEff(v,i)).filter(v=>reg==='ALL'?true:reg==='NORTE_PDTN'?v.regiao==='Norte'||v.regiao==='PDTN':v.regiao===reg);
+  // Usar exatamente o mesmo universo da página principal: região selecionada,
+  // sem viaturas removidas e, no GPS, sem Oficina/Sinistro.
+  const lst=ALL_VEHICLES.map((v,i)=>getEff(v,i)).filter(v=>(reg==='ALL'?true:reg==='NORTE_PDTN'?v.regiao==='Norte'||v.regiao==='PDTN':v.regiao===reg)&&v.obs!=='Removida');
   const t=lst.length||1;
+  const gpsLst=lst.filter(isAtivo); const tGps=gpsLst.length||1;
   const tP=lst.filter(hasPorta).length||1; const tT=lst.filter(hasTemp).length||1;
-  return { gps:+(lst.filter(v=>v.gpsOK).length/t*100).toFixed(1), porta:+(lst.filter(v=>v.portaOK&&hasPorta(v)).length/tP*100).toFixed(1), temp:+(lst.filter(v=>v.tempOK&&hasTemp(v)).length/tT*100).toFixed(1), volt:+(lst.filter(v=>v.voltOK).length/t*100).toFixed(1) };
+  return { gps:+(gpsLst.filter(v=>v.gpsOK).length/tGps*100).toFixed(1), gpsOK:gpsLst.filter(v=>v.gpsOK).length, gpsTotal:gpsLst.length, porta:+(lst.filter(v=>v.portaOK&&hasPorta(v)).length/tP*100).toFixed(1), temp:+(lst.filter(v=>v.tempOK&&hasTemp(v)).length/tT*100).toFixed(1), volt:+(lst.filter(v=>v.voltOK).length/t*100).toFixed(1) };
 }
 async function saveWeek() {
-  const norte=getRegionStats('Norte'), pdtn=getRegionStats('PDTN');
-  const entry={ week:meta.weekNum, year:meta.year, date:meta.date, norte, pdtn };
+  const norte=getRegionStats('Norte'), pdtn=getRegionStats('PDTN'), norte_pdtn=getRegionStats('NORTE_PDTN');
+  const entry={ week:meta.weekNum, year:meta.year, date:meta.date, norte, pdtn, norte_pdtn };
   let hist=ls(K_HISTORY)||[];
   hist=hist.filter(e=>!(e.week===entry.week&&e.year===entry.year));
   hist.push(entry); hist.sort((a,b)=>a.year!==b.year?a.year-b.year:a.week-b.week);
@@ -2844,14 +2847,17 @@ async function recoverHistoryFromSupabase() {
     r.data.forEach(w => {
       const vs = w.vehicles || [];
       if(!vs.length) return;
-      const tot = n => vs.filter(v=>v[n]).length;
-      const pct = n => vs.length ? +(tot(n)/vs.length*100).toFixed(1) : 0;
-      const byReg = reg => vs.filter(v=>v.regiao===reg);
-      const pctR = (reg,n) => { const vs2=byReg(reg); return vs2.length ? +(vs2.filter(v=>v[n]).length/vs2.length*100).toFixed(1) : 0; };
+      const byReg = reg => vs.filter(v=>(reg==='NORTE_PDTN'?(v.regiao==='Norte'||v.regiao==='PDTN'):v.regiao===reg)&&v.obs!=='Removida');
+      const statsR = reg => {
+        const vs2=byReg(reg), gpsVs=vs2.filter(isAtivo);
+        const pct=(arr,n)=>arr.length?+(arr.filter(v=>v[n]).length/arr.length*100).toFixed(1):0;
+        return { gps:pct(gpsVs,'gpsOK'), gpsOK:gpsVs.filter(v=>v.gpsOK).length, gpsTotal:gpsVs.length, porta:pct(vs2.filter(hasPorta),'portaOK'), temp:pct(vs2.filter(hasTemp),'tempOK'), volt:pct(vs2,'voltOK') };
+      };
       hist.push({
         week: w.week_num, year: w.year, date: w.date,
-        norte: { gps: pctR('Norte','gpsOK'), porta: pctR('Norte','portaOK'), temp: pctR('Norte','tempOK'), volt: pctR('Norte','voltOK') },
-        pdtn:  { gps: pctR('PDTN','gpsOK'),  porta: pctR('PDTN','portaOK'),  temp: pctR('PDTN','tempOK'),  volt: pctR('PDTN','voltOK') },
+        norte: statsR('Norte'),
+        pdtn: statsR('PDTN'),
+        norte_pdtn: statsR('NORTE_PDTN'),
       });
     });
     hist.sort((a,b)=>a.year!==b.year?a.year-b.year:a.week-b.week);
@@ -2868,11 +2874,11 @@ async function recoverHistoryFromSupabase() {
   }
 }
 
-function mkChart(id,nData,pData,labels) {
+function mkChart(id,nData,pData,labels,cData=null) {
   const ctx=document.getElementById(id);
   if(!ctx) return null;
   // Eixo Y dinâmico: zoom na zona dos dados, teto sempre 100%
-  const vals = nData.concat(pData).filter(v => typeof v === 'number' && !isNaN(v));
+  const vals = nData.concat(pData,cData||[]).filter(v => typeof v === 'number' && !isNaN(v));
   let yMin = 0;
   if (vals.length) {
     const lo = Math.min.apply(null, vals);
@@ -2881,11 +2887,13 @@ function mkChart(id,nData,pData,labels) {
     if (yMin > 95) yMin = 95; // garante que há sempre alguma altura visível
   }
   const obj={label:'Objetivo',data:labels.map(()=>98),borderColor:'rgba(255,255,255,0.25)',borderDash:[5,4],borderWidth:1.5,pointRadius:0,fill:false,tension:0};
-  return new Chart(ctx,{type:'line',data:{labels,datasets:[
+  const datasets=[
     {label:'Norte',data:nData,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.07)',borderWidth:2,pointRadius:3,pointBackgroundColor:'#3b82f6',tension:0,fill:false,spanGaps:true},
     {label:'PDTN', data:pData,borderColor:'#22c55e',backgroundColor:'rgba(34,197,94,0.07)', borderWidth:2,pointRadius:3,pointBackgroundColor:'#22c55e',tension:0,fill:false,spanGaps:true},
-    obj
-  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#9ca3af',font:{size:11},boxWidth:12}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+c.parsed.y+'%'}}},scales:{y:{min:yMin,max:100,ticks:{callback:v=>v+'%',color:'#6b7280',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}},x:{ticks:{color:'#6b7280',font:{size:10},maxRotation:45},grid:{display:false}}}}});
+  ];
+  if(cData) datasets.push({label:'Norte + PDTN',data:cData,borderColor:'#f59e0b',backgroundColor:'rgba(245,158,11,0.07)',borderWidth:2.5,pointRadius:3,pointBackgroundColor:'#f59e0b',tension:0,fill:false,spanGaps:true});
+  datasets.push(obj);
+  return new Chart(ctx,{type:'line',data:{labels,datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#9ca3af',font:{size:11},boxWidth:12}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+c.parsed.y+'%'}}},scales:{y:{min:yMin,max:100,ticks:{callback:v=>v+'%',color:'#6b7280',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}},x:{ticks:{color:'#6b7280',font:{size:10},maxRotation:45},grid:{display:false}}}}});
 }
 
 // Preenche semanas em falta entre a primeira e a última, para o eixo X ser uma linha temporal contínua.
@@ -2913,14 +2921,16 @@ function buildContinuousWeeks(data) {
 
 function renderTrend() {
   let data=ls(K_HISTORY)||[];
-  const cur={week:meta.weekNum,year:meta.year,date:meta.date,norte:getRegionStats('Norte'),pdtn:getRegionStats('PDTN')};
+  const cur={week:meta.weekNum,year:meta.year,date:meta.date,norte:getRegionStats('Norte'),pdtn:getRegionStats('PDTN'),norte_pdtn:getRegionStats('NORTE_PDTN')};
   const alreadySaved=data.some(e=>e.week===cur.week&&e.year===cur.year);
-  if(!alreadySaved){data=[...data,cur].sort((a,b)=>a.year!==b.year?a.year-b.year:a.week-b.week);}
+  // A semana atual é sempre apresentada com os dados atuais. O snapshot guardado
+  // continua intacto no histórico e volta a ser definitivo quando a semana termina.
+  data=[...data.filter(e=>!(e.week===cur.week&&e.year===cur.year)),cur].sort((a,b)=>a.year!==b.year?a.year-b.year:a.week-b.week);
   // Construir eixo X contínuo: preencher semanas em falta entre a primeira e a última (null nos buracos)
   const serie = buildContinuousWeeks(data);
   const labels = serie.map(e => `Sem ${e.week}`);
   if(chartGPS)chartGPS.destroy(); if(chartPorta)chartPorta.destroy(); if(chartTemp)chartTemp.destroy(); if(chartVolt)chartVolt.destroy();
-  chartGPS   =mkChart('chart-gps',  serie.map(e=>e.norte?e.norte.gps:null),  serie.map(e=>e.pdtn?e.pdtn.gps:null),  labels);
+  chartGPS   =mkChart('chart-gps',  serie.map(e=>e.norte?e.norte.gps:null),  serie.map(e=>e.pdtn?e.pdtn.gps:null),  labels, serie.map(e=>e.norte_pdtn?e.norte_pdtn.gps:null));
   chartPorta =mkChart('chart-porta',serie.map(e=>e.norte?e.norte.porta:null),serie.map(e=>e.pdtn?e.pdtn.porta:null),labels);
   chartTemp  =mkChart('chart-temp', serie.map(e=>e.norte?e.norte.temp:null), serie.map(e=>e.pdtn?e.pdtn.temp:null), labels);
   chartVolt  =mkChart('chart-volt', serie.map(e=>e.norte?e.norte.volt:null), serie.map(e=>e.pdtn?e.pdtn.volt:null), labels);
